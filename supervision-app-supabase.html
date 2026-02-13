@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מערכת ניהול פיקוח עליון</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            direction: rtl;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .screen {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-screen {
+            max-width: 400px;
+            margin: 100px auto;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #667eea;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .input-group input, .input-group textarea, .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        .input-group input:focus, .input-group textarea:focus, .input-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            margin-top: 10px;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-small {
+            width: auto;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .header h2 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-email {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .search-box {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .list-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .list-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateX(-5px);
+        }
+
+        .list-item h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .list-item p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .list-item .meta {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #999;
+        }
+
+        .detail-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+        }
+
+        .detail-header h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .detail-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .detail-section h4 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .pdf-container {
+            position: relative;
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 600px;
+            margin-bottom: 20px;
+        }
+
+        .pdf-canvas {
+            width: 100%;
+            cursor: crosshair;
+        }
+
+        .pdf-marker {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: red;
+            border: 3px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .defects-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .defect-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .defect-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .defect-severity {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .severity-critical {
+            background: #dc3545;
+            color: white;
+        }
+
+        .severity-medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .severity-low {
+            background: #28a745;
+            color: white;
+        }
+
+        .defect-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .defect-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            color: #333;
+            font-size: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .file-upload {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .file-upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .back-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .back-btn:hover {
+            background: #5a6268;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .admin-section {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 2px solid #ffc107;
+        }
+
+        .admin-section h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .setup-box {
+            background: #d1ecf1;
+            border: 2px solid #0c5460;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .setup-box h3 {
+            color: #0c5460;
+            margin-bottom: 15px;
+        }
+
+        .setup-box ol {
+            margin: 15px 0 15px 30px;
+            color: #0c5460;
+        }
+
+        .setup-box li {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Setup Screen -->
+    <div id="setupScreen" class="screen active">
+        <div class="container">
+            <div class="login-screen" style="max-width: 800px;">
+                <div class="logo">
+                    <h1>🏗️ מערכת ניהול פיקוח עליון</h1>
+                    <p>התקנה ראשונית - Supabase</p>
+                </div>
+
+                <div class="setup-box">
+                    <h3>📋 הוראות התקנה (5 דקות):</h3>
+                    
+                    <ol>
+                        <li>
+                            <strong>צור חשבון Supabase:</strong><br>
+                            גש ל-<a href="https://supabase.com" target="_blank">https://supabase.com</a><br>
+                            לחץ "Start your project" והתחבר עם GitHub/Google
+                        </li>
+                        
+                        <li>
+                            <strong>צור פרויקט חדש:</strong><br>
+                            לחץ "New Project"<br>
+                            שם: supervision-system<br>
+                            סיסמת Database: שמור אותה! (תצטרך מאוחר יותר)<br>
+                            Region: בחר West Asia (הכי קרוב לישראל)<br>
+                            לחץ "Create new project" והמתן כדקה
+                        </li>
+                        
+                        <li>
+                            <strong>קבל את ה-URL וה-API Key:</strong><br>
+                            מהתפריט הצדדי: Settings → API<br>
+                            העתק את:<br>
+                            • Project URL (https://xxx.supabase.co)<br>
+                            • anon public key (eyJh...)
+                        </li>
+                        
+                        <li>
+                            <strong>הדבק למטה והתחל לעבוד!</strong>
+                        </li>
+                    </ol>
+
+                    <div class="input-group">
+                        <label>Supabase URL:</label>
+                        <input type="text" id="supabaseUrl" placeholder="https://xxxxx.supabase.co">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Supabase Anon Key:</label>
+                        <input type="text" id="supabaseKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                    </div>
+
+                    <button class="btn" onclick="initializeSupabase()">אתחל מערכת</button>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>💡 טיפ:</strong> שמור את הפרטים האלה במקום בטוח. תצטרך אותן רק פעם אחת.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen">
+        <div class="container">
+            <div class="login-screen">
+                <div class="logo">
+                    <h1>🏗️ מערכת ניהול פיקוח עליון</h1>
+                    <p>ניהול מקצועי של פיקוחי בנייה</p>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>👤 משתמש ראשון?</strong><br>
+                    צור חשבון חדש עם המייל והסיסמה שלך.<br>
+                    המשתמש הראשון יהפוך אוטומטית למנהל מערכת.
+                </div>
+
+                <div class="input-group">
+                    <label>דואר אלקטרוני</label>
+                    <input type="email" id="loginEmail" placeholder="your@email.com">
+                </div>
+                <div class="input-group">
+                    <label>סיסמה</label>
+                    <input type="password" id="loginPassword" placeholder="הזן סיסמה (לפחות 6 תווים)">
+                </div>
+                <button class="btn" onclick="login()" id="loginBtn">התחבר</button>
+                <button class="btn btn-secondary" onclick="register()" id="registerBtn">צור חשבון חדש</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Projects Screen -->
+    <div id="projectsScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h2>📋 רשימת פרויקטים</h2>
+                <div class="user-info">
+                    <span class="user-email" id="userEmail"></span>
+                    <button class="btn btn-small btn-secondary" onclick="logout()">התנתק</button>
+                </div>
+            </div>
+
+            <div class="admin-section" id="adminPanel" style="display: none;">
+                <h4>👤 פאנל מנהל</h4>
+                <p style="margin: 10px 0; color: #856404;">משתמשים רשומים: <span id="userCount">0</span></p>
+            </div>
+
+            <div class="action-bar">
+                <input type="text" class="search-box" id="projectSearch" placeholder="🔍 חפש פרויקט..." onkeyup="filterProjects()">
+                <button class="btn btn-small" onclick="showAddProjectModal()">+ הוסף פרויקט</button>
+            </div>
+
+            <div class="loading" id="projectsLoading">
+                <div class="spinner"></div>
+                <p>טוען פרויקטים...</p>
+            </div>
+
+            <div class="list" id="projectsList"></div>
+
+            <div class="empty-state" id="projectsEmpty" style="display: none;">
+                <div class="empty-state-icon">📁</div>
+                <h3>אין פרויקטים עדיין</h3>
+                <p>לחץ על "הוסף פרויקט" כדי להתחיל</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inspections Screen -->
+    <div id="inspectionsScreen" class="screen">
+        <div class="container">
+            <button class="back-btn" onclick="showProjectsScreen()">← חזור לפרויקטים</button>
+            
+            <div class="header">
+                <h2 id="inspectionsTitle">📝 פיקוחים</h2>
+            </div>
+
+            <div class="action-bar">
+                <input type="text" class="search-box" id="inspectionSearch" placeholder="🔍 חפש פיקוח..." onkeyup="filterInspections()">
+                <button class="btn btn-small" onclick="showAddInspectionModal()">+ הוסף פיקוח</button>
+            </div>
+
+            <div class="loading" id="inspectionsLoading">
+                <div class="spinner"></div>
+                <p>טוען פיקוחים...</p>
+            </div>
+
+            <div class="list" id="inspectionsList"></div>
+
+            <div class="empty-state" id="inspectionsEmpty" style="display: none;">
+                <div class="empty-state-icon">📋</div>
+                <h3>אין פיקוחים עדיין</h3>
+                <p>לחץ על "הוסף פיקוח" כדי להתחיל</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inspection Detail Screen -->
+    <div id="inspectionDetailScreen" class="screen">
+        <div class="container">
+            <button class="back-btn" onclick="showInspectionsScreen()">← חזור לפיקוחים</button>
+            
+            <div class="detail-header" id="detailHeader">
+                <h3 id="detailTitle"></h3>
+                <p id="detailDate"></p>
+            </div>
+
+            <div class="detail-section">
+                <h4>📄 תוכנית PDF</h4>
+                <div id="pdfSection">
+                    <div class="file-upload" onclick="document.getElementById('pdfUpload').click()">
+                        <div class="file-upload-icon">📎</div>
+                        <p><strong>לחץ להעלאת קובץ PDF</strong></p>
+                        <p style="font-size: 14px; color: #999; margin-top: 5px;">מקסימום 5MB</p>
+                    </div>
+                    <input type="file" id="pdfUpload" accept=".pdf" onchange="loadPDF(event)">
+                </div>
+                <div id="pdfViewer" style="display: none;">
+                    <div class="pdf-container" id="pdfContainer">
+                        <canvas id="pdfCanvas" class="pdf-canvas"></canvas>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">💡 לחץ על התוכנית כדי לסמן מיקומי ליקויים</p>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>⚠️ רשימת ליקויים</h4>
+                <button class="btn btn-small" onclick="showAddDefectModal()">+ הוסף ליקוי</button>
+                
+                <div class="loading" id="defectsLoading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>טוען ליקויים...</p>
+                </div>
+                
+                <div class="defects-list" id="defectsList"></div>
+                <div class="empty-state" id="defectsEmpty">
+                    <div class="empty-state-icon">✓</div>
+                    <p>אין ליקויים רשומים</p>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-success" onclick="generateReport()">📥 הפק דוח PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="addProjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>הוסף פרויקט חדש</h3>
+                <button class="close-btn" onclick="closeModal('addProjectModal')">&times;</button>
+            </div>
+            <div class="input-group">
+                <label>שם הפרויקט</label>
+                <input type="text" id="newProjectName" placeholder="למשל: קניון עזריאלי">
+            </div>
+            <div class="input-group">
+                <label>כתובת</label>
+                <input type="text" id="newProjectAddress" placeholder="כתובת הפרויקט">
+            </div>
+            <div class="input-group">
+                <label>תיאור</label>
+                <textarea id="newProjectDescription" placeholder="תיאור קצר של הפרויקט"></textarea>
+            </div>
+            <button class="btn" onclick="addProject()">הוסף פרויקט</button>
+        </div>
+    </div>
+
+    <div id="addInspectionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>הוסף פיקוח חדש</h3>
+                <button class="close-btn" onclick="closeModal('addInspectionModal')">&times;</button>
+            </div>
+            <div class="input-group">
+                <label>שם הפיקוח</label>
+                <input type="text" id="newInspectionName" placeholder="למשל: פיקוח עליון ברזל תחתון קומה טיפוסית 5-10">
+            </div>
+            <div class="input-group">
+                <label>תאריך הפיקוח</label>
+                <input type="date" id="newInspectionDate">
+            </div>
+            <div class="input-group">
+                <label>הערות</label>
+                <textarea id="newInspectionNotes" placeholder="הערות נוספות"></textarea>
+            </div>
+            <button class="btn" onclick="addInspection()">הוסף פיקוח</button>
+        </div>
+    </div>
+
+    <div id="addDefectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>הוסף ליקוי</h3>
+                <button class="close-btn" onclick="closeModal('addDefectModal')">&times;</button>
+            </div>
+            <div class="input-group">
+                <label>תיאור הליקוי</label>
+                <textarea id="newDefectDescription" placeholder="תאר את הליקוי שנמצא"></textarea>
+            </div>
+            <div class="input-group">
+                <label>רמת חומרה</label>
+                <select id="newDefectSeverity">
+                    <option value="low">נמוכה</option>
+                    <option value="medium">בינונית</option>
+                    <option value="critical">קריטית</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>תמונות (עד 3MB כל תמונה)</label>
+                <input type="file" id="newDefectImages" accept="image/*" multiple>
+            </div>
+            <button class="btn" onclick="addDefect()" id="addDefectBtn">הוסף ליקוי</button>
+        </div>
+    </div>
+
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <script>
+        let supabase;
+        let currentUser = null;
+        let currentProject = null;
+        let currentInspection = null;
+        let pdfMarkers = [];
+        let pdfDoc = null;
+        let pdfPage = null;
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Initialize Supabase
+        async function initializeSupabase() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+
+            if (!url || !key) {
+                alert('נא למלא את כל השדות');
+                return;
+            }
+
+            try {
+                localStorage.setItem('supabaseUrl', url);
+                localStorage.setItem('supabaseKey', key);
+
+                supabase = window.supabase.createClient(url, key);
+
+                // Create tables if they don't exist
+                await createTables();
+
+                showScreen('loginScreen');
+                alert('Supabase הופעל בהצלחה! כעת תוכל להתחבר או ליצור חשבון.');
+            } catch (error) {
+                alert('שגיאה באתחול: ' + error.message);
+            }
+        }
+
+        // Create necessary tables
+        async function createTables() {
+            // Tables will be created automatically on first use
+            // Supabase creates them dynamically
+        }
+
+        // Check if already configured
+        window.onload = async function() {
+            const url = localStorage.getItem('supabaseUrl');
+            const key = localStorage.getItem('supabaseKey');
+            
+            if (url && key) {
+                try {
+                    supabase = window.supabase.createClient(url, key);
+                    
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        currentUser = user;
+                        await loadUserData();
+                    } else {
+                        showScreen('loginScreen');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showScreen('setupScreen');
+                }
+            }
+        };
+
+        // Register
+        async function register() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                alert('נא למלא את כל השדות');
+                return;
+            }
+
+            if (password.length < 6) {
+                alert('הסיסמה חייבת להכיל לפחות 6 תווים');
+                return;
+            }
+
+            try {
+                document.getElementById('registerBtn').disabled = true;
+                document.getElementById('registerBtn').textContent = 'יוצר חשבון...';
+
+                const { data, error } = await supabase.auth.signUp({
+                    email: email,
+                    password: password,
+                });
+
+                if (error) throw error;
+
+                // Check if first user
+                const { count } = await supabase
+                    .from('users')
+                    .select('*', { count: 'exact', head: true });
+
+                const isFirstUser = count === 0;
+
+                // Create user record
+                await supabase.from('users').insert([{
+                    id: data.user.id,
+                    email: email,
+                    is_admin: isFirstUser,
+                    created_at: new Date().toISOString()
+                }]);
+
+                alert(isFirstUser ? 
+                    'חשבון נוצר בהצלחה! אתה המנהל הראשון של המערכת.\nנא לבדוק את המייל לאימות.' : 
+                    'חשבון נוצר בהצלחה! נא לבדוק את המייל לאימות.');
+                
+                document.getElementById('registerBtn').disabled = false;
+                document.getElementById('registerBtn').textContent = 'צור חשבון חדש';
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+                document.getElementById('registerBtn').disabled = false;
+                document.getElementById('registerBtn').textContent = 'צור חשבון חדש';
+            }
+        }
+
+        // Login
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                alert('נא למלא את כל השדות');
+                return;
+            }
+
+            try {
+                document.getElementById('loginBtn').disabled = true;
+                document.getElementById('loginBtn').textContent = 'מתחבר...';
+
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password,
+                });
+
+                if (error) throw error;
+
+                currentUser = data.user;
+                await loadUserData();
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+                document.getElementById('loginBtn').disabled = false;
+                document.getElementById('loginBtn').textContent = 'התחבר';
+            }
+        }
+
+        // Load user data
+        async function loadUserData() {
+            try {
+                const { data: userData } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', currentUser.id)
+                    .single();
+                
+                document.getElementById('userEmail').textContent = currentUser.email;
+                
+                if (userData && userData.is_admin) {
+                    document.getElementById('adminPanel').style.display = 'block';
+                    const { count } = await supabase
+                        .from('users')
+                        .select('*', { count: 'exact', head: true });
+                    document.getElementById('userCount').textContent = count || 0;
+                }
+                
+                showProjectsScreen();
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                showProjectsScreen();
+            }
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                await supabase.auth.signOut();
+                currentUser = null;
+                currentProject = null;
+                currentInspection = null;
+                document.getElementById('loginEmail').value = '';
+                document.getElementById('loginPassword').value = '';
+                showScreen('loginScreen');
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        // Show screen
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // Show Projects Screen
+        function showProjectsScreen() {
+            showScreen('projectsScreen');
+            renderProjects();
+        }
+
+        // Render projects
+        async function renderProjects() {
+            const list = document.getElementById('projectsList');
+            const empty = document.getElementById('projectsEmpty');
+            const loading = document.getElementById('projectsLoading');
+            
+            loading.style.display = 'block';
+            list.innerHTML = '';
+            empty.style.display = 'none';
+
+            try {
+                const { data: projects, error } = await supabase
+                    .from('projects')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                loading.style.display = 'none';
+
+                if (error) throw error;
+
+                if (!projects || projects.length === 0) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                list.innerHTML = projects.map(project => `
+                    <div class="list-item" onclick="selectProject('${project.id}')">
+                        <h3>🏢 ${project.name}</h3>
+                        <p>${project.address || ''}</p>
+                        <p style="margin-top: 8px; color: #666;">${project.description || ''}</p>
+                        <div class="meta">
+                            <span>נוצר: ${new Date(project.created_at).toLocaleDateString('he-IL')}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                loading.style.display = 'none';
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        function filterProjects() {
+            const search = document.getElementById('projectSearch').value.toLowerCase();
+            const items = document.querySelectorAll('#projectsList .list-item');
+            items.forEach(item => {
+                item.style.display = item.textContent.toLowerCase().includes(search) ? 'block' : 'none';
+            });
+        }
+
+        function showAddProjectModal() {
+            document.getElementById('addProjectModal').classList.add('active');
+        }
+
+        async function addProject() {
+            const name = document.getElementById('newProjectName').value.trim();
+            const address = document.getElementById('newProjectAddress').value.trim();
+            const description = document.getElementById('newProjectDescription').value.trim();
+
+            if (!name) {
+                alert('נא להזין שם פרויקט');
+                return;
+            }
+
+            try {
+                const { error } = await supabase.from('projects').insert([{
+                    name,
+                    address,
+                    description,
+                    created_by: currentUser.id,
+                    created_at: new Date().toISOString()
+                }]);
+
+                if (error) throw error;
+
+                renderProjects();
+                closeModal('addProjectModal');
+
+                document.getElementById('newProjectName').value = '';
+                document.getElementById('newProjectAddress').value = '';
+                document.getElementById('newProjectDescription').value = '';
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        async function selectProject(projectId) {
+            try {
+                const { data, error } = await supabase
+                    .from('projects')
+                    .select('*')
+                    .eq('id', projectId)
+                    .single();
+
+                if (error) throw error;
+                currentProject = data;
+                showInspectionsScreen();
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        function showInspectionsScreen() {
+            showScreen('inspectionsScreen');
+            document.getElementById('inspectionsTitle').textContent = `📝 פיקוחים - ${currentProject.name}`;
+            renderInspections();
+        }
+
+        async function renderInspections() {
+            const list = document.getElementById('inspectionsList');
+            const empty = document.getElementById('inspectionsEmpty');
+            const loading = document.getElementById('inspectionsLoading');
+            
+            loading.style.display = 'block';
+            list.innerHTML = '';
+            empty.style.display = 'none';
+
+            try {
+                const { data: inspections, error } = await supabase
+                    .from('inspections')
+                    .select('*')
+                    .eq('project_id', currentProject.id)
+                    .order('created_at', { ascending: false });
+
+                loading.style.display = 'none';
+
+                if (error) throw error;
+
+                if (!inspections || inspections.length === 0) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                list.innerHTML = inspections.map(inspection => `
+                    <div class="list-item" onclick="selectInspection('${inspection.id}')">
+                        <h3>📋 ${inspection.name}</h3>
+                        <p>${inspection.notes || ''}</p>
+                        <div class="meta">
+                            <span>📅 ${new Date(inspection.date).toLocaleDateString('he-IL')}</span>
+                            <span>נוצר: ${new Date(inspection.created_at).toLocaleDateString('he-IL')}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                loading.style.display = 'none';
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        function filterInspections() {
+            const search = document.getElementById('inspectionSearch').value.toLowerCase();
+            const items = document.querySelectorAll('#inspectionsList .list-item');
+            items.forEach(item => {
+                item.style.display = item.textContent.toLowerCase().includes(search) ? 'block' : 'none';
+            });
+        }
+
+        function showAddInspectionModal() {
+            document.getElementById('newInspectionDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('addInspectionModal').classList.add('active');
+        }
+
+        async function addInspection() {
+            const name = document.getElementById('newInspectionName').value.trim();
+            const date = document.getElementById('newInspectionDate').value;
+            const notes = document.getElementById('newInspectionNotes').value.trim();
+
+            if (!name || !date) {
+                alert('נא למלא שם ותאריך');
+                return;
+            }
+
+            try {
+                const { error } = await supabase.from('inspections').insert([{
+                    project_id: currentProject.id,
+                    name,
+                    date,
+                    notes,
+                    created_by: currentUser.id,
+                    created_at: new Date().toISOString()
+                }]);
+
+                if (error) throw error;
+
+                renderInspections();
+                closeModal('addInspectionModal');
+
+                document.getElementById('newInspectionName').value = '';
+                document.getElementById('newInspectionNotes').value = '';
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        async function selectInspection(inspectionId) {
+            try {
+                const { data, error } = await supabase
+                    .from('inspections')
+                    .select('*')
+                    .eq('id', inspectionId)
+                    .single();
+
+                if (error) throw error;
+                currentInspection = data;
+                showInspectionDetailScreen();
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        async function showInspectionDetailScreen() {
+            showScreen('inspectionDetailScreen');
+            document.getElementById('detailTitle').textContent = currentInspection.name;
+            document.getElementById('detailDate').textContent = `📅 ${new Date(currentInspection.date).toLocaleDateString('he-IL')}`;
+            
+            if (currentInspection.pdf_url) {
+                document.getElementById('pdfSection').style.display = 'none';
+                document.getElementById('pdfViewer').style.display = 'block';
+                await loadPDFFromUrl(currentInspection.pdf_url);
+            } else {
+                document.getElementById('pdfSection').style.display = 'block';
+                document.getElementById('pdfViewer').style.display = 'none';
+            }
+            
+            pdfMarkers = currentInspection.markers || [];
+            renderDefects();
+        }
+
+        async function loadPDF(event) {
+            const file = event.target.files[0];
+            if (!file || file.type !== 'application/pdf') {
+                alert('נא לבחור קובץ PDF');
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) {
+                alert('הקובץ גדול מדי. מקסימום 5MB');
+                return;
+            }
+
+            try {
+                const fileName = `${currentInspection.id}/${Date.now()}.pdf`;
+                
+                const { data, error } = await supabase.storage
+                    .from('pdfs')
+                    .upload(fileName, file);
+
+                if (error) throw error;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('pdfs')
+                    .getPublicUrl(fileName);
+
+                await supabase.from('inspections')
+                    .update({ pdf_url: publicUrl })
+                    .eq('id', currentInspection.id);
+
+                currentInspection.pdf_url = publicUrl;
+                
+                document.getElementById('pdfSection').style.display = 'none';
+                document.getElementById('pdfViewer').style.display = 'block';
+                
+                await loadPDFFromUrl(publicUrl);
+            } catch (error) {
+                alert('שגיאה בהעלאת PDF: ' + error.message);
+            }
+        }
+
+        async function loadPDFFromUrl(url) {
+            try {
+                const loadingTask = pdfjsLib.getDocument(url);
+                pdfDoc = await loadingTask.promise;
+                pdfPage = await pdfDoc.getPage(1);
+                
+                const canvas = document.getElementById('pdfCanvas');
+                const context = canvas.getContext('2d');
+                const viewport = pdfPage.getViewport({ scale: 1.5 });
+                
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                await pdfPage.render({ canvasContext: context, viewport }).promise;
+                renderMarkers();
+
+                canvas.onclick = async function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    pdfMarkers.push({ x, y });
+                    
+                    await supabase.from('inspections')
+                        .update({ markers: pdfMarkers })
+                        .eq('id', currentInspection.id);
+                    
+                    renderMarkers();
+                };
+            } catch (error) {
+                alert('שגיאה בטעינת PDF: ' + error.message);
+            }
+        }
+
+        function renderMarkers() {
+            const container = document.getElementById('pdfContainer');
+            container.querySelectorAll('.pdf-marker').forEach(m => m.remove());
+            
+            pdfMarkers.forEach((marker, index) => {
+                const markerEl = document.createElement('div');
+                markerEl.className = 'pdf-marker';
+                markerEl.style.left = marker.x + 'px';
+                markerEl.style.top = marker.y + 'px';
+                markerEl.textContent = index + 1;
+                markerEl.onclick = async function(e) {
+                    e.stopPropagation();
+                    if (confirm('למחוק סימון?')) {
+                        pdfMarkers.splice(index, 1);
+                        await supabase.from('inspections')
+                            .update({ markers: pdfMarkers })
+                            .eq('id', currentInspection.id);
+                        renderMarkers();
+                    }
+                };
+                container.appendChild(markerEl);
+            });
+        }
+
+        function showAddDefectModal() {
+            document.getElementById('addDefectModal').classList.add('active');
+        }
+
+        async function addDefect() {
+            const description = document.getElementById('newDefectDescription').value.trim();
+            const severity = document.getElementById('newDefectSeverity').value;
+            const imageFiles = document.getElementById('newDefectImages').files;
+
+            if (!description) {
+                alert('נא לתאר את הליקוי');
+                return;
+            }
+
+            try {
+                document.getElementById('addDefectBtn').disabled = true;
+                document.getElementById('addDefectBtn').textContent = 'מעלה...';
+
+                const imageUrls = [];
+                
+                for (let file of imageFiles) {
+                    if (file.size > 3 * 1024 * 1024) {
+                        alert('תמונה גדולה מדי: ' + file.name);
+                        continue;
+                    }
+
+                    const fileName = `${currentInspection.id}/${Date.now()}_${file.name}`;
+                    
+                    const { error: uploadError } = await supabase.storage
+                        .from('defect-images')
+                        .upload(fileName, file);
+
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('defect-images')
+                        .getPublicUrl(fileName);
+
+                    imageUrls.push(publicUrl);
+                }
+
+                const { error } = await supabase.from('defects').insert([{
+                    inspection_id: currentInspection.id,
+                    description,
+                    severity,
+                    images: imageUrls,
+                    created_by: currentUser.id,
+                    created_at: new Date().toISOString()
+                }]);
+
+                if (error) throw error;
+
+                renderDefects();
+                closeModal('addDefectModal');
+
+                document.getElementById('newDefectDescription').value = '';
+                document.getElementById('newDefectSeverity').value = 'low';
+                document.getElementById('newDefectImages').value = '';
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            } finally {
+                document.getElementById('addDefectBtn').disabled = false;
+                document.getElementById('addDefectBtn').textContent = 'הוסף ליקוי';
+            }
+        }
+
+        async function renderDefects() {
+            const list = document.getElementById('defectsList');
+            const empty = document.getElementById('defectsEmpty');
+            const loading = document.getElementById('defectsLoading');
+            
+            loading.style.display = 'block';
+            list.innerHTML = '';
+            empty.style.display = 'none';
+
+            try {
+                const { data: defects, error } = await supabase
+                    .from('defects')
+                    .select('*')
+                    .eq('inspection_id', currentInspection.id)
+                    .order('created_at', { ascending: false });
+
+                loading.style.display = 'none';
+
+                if (error) throw error;
+
+                if (!defects || defects.length === 0) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                const severityLabels = {
+                    low: 'נמוכה',
+                    medium: 'בינונית',
+                    critical: 'קריטית'
+                };
+
+                list.innerHTML = defects.map((defect, index) => `
+                    <div class="defect-item">
+                        <div class="defect-header">
+                            <strong>ליקוי ${index + 1}</strong>
+                            <span class="defect-severity severity-${defect.severity}">
+                                ${severityLabels[defect.severity]}
+                            </span>
+                        </div>
+                        <p style="margin: 10px 0; color: #333;">${defect.description}</p>
+                        ${defect.images && defect.images.length > 0 ? `
+                            <div class="defect-images">
+                                ${defect.images.map(img => `
+                                    <img src="${img}" class="defect-image" onclick="window.open('${img}', '_blank')">
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                loading.style.display = 'none';
+                alert('שגיאה: ' + error.message);
+            }
+        }
+
+        async function generateReport() {
+            alert('תכונת הפקת דוחות תהיה זמינה בקרוב');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
