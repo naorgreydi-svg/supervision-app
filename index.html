@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>מערכת ניהול פיקוח עליון - בנייה</title>
+    <title>מערכת ניהול פיקוח עליון - Firebase</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <!-- PDF & Export Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -1476,6 +1484,25 @@
         // PDF.js Configuration
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCuxnE-K8Mu-E2i0OKwQ7l6o5_slRlsXUA",
+            authDomain: "supervision-system-7b58d.firebaseapp.com",
+            projectId: "supervision-system-7b58d",
+            storageBucket: "supervision-system-7b58d.firebasestorage.app",
+            messagingSenderId: "655286668860",
+            appId: "1:655286668860:web:f442509a3ac07b14f8fd39",
+            measurementId: "G-FKWZ0BBX86"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+        console.log('🔥 Firebase initialized successfully!');
+
         // Global State
         let currentUser = null;
         let currentProject = null;
@@ -1491,18 +1518,54 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            checkAuth();
             initializeApp();
+            // Firebase Auth State Observer
+            auth.onAuthStateChanged(user => {
+                if (user) {
+                    console.log('✅ User logged in:', user.email);
+                    loadUserDataFromFirebase(user);
+                } else {
+                    console.log('❌ No user logged in');
+                    showLogin();
+                }
+            });
         });
 
-        // Authentication Functions
-        function checkAuth() {
-            const user = localStorage.getItem('currentUser');
-            if (user) {
-                currentUser = JSON.parse(user);
+        // Load user data from Firestore
+        async function loadUserDataFromFirebase(user) {
+            try {
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                
+                if (userDoc.exists) {
+                    currentUser = {
+                        uid: user.uid,
+                        email: user.email,
+                        name: user.displayName || userDoc.data().name,
+                        role: userDoc.data().role || 'user'
+                    };
+                } else {
+                    // First time login - create user document
+                    currentUser = {
+                        uid: user.uid,
+                        email: user.email,
+                        name: user.displayName || user.email.split('@')[0],
+                        role: 'user'
+                    };
+                    
+                    // Check if first user - make admin
+                    const usersSnapshot = await db.collection('users').get();
+                    if (usersSnapshot.empty) {
+                        currentUser.role = 'admin';
+                    }
+                    
+                    await db.collection('users').doc(user.uid).set(currentUser);
+                }
+                
                 showApp();
-            } else {
-                showLogin();
+                loadProjects();
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                showError('שגיאה בטעינת נתונים');
             }
         }
 
@@ -1523,91 +1586,133 @@
         }
 
         // Login Form
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        // Login Form - Firebase
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
-            
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const user = users.find(u => u.email === email);
-            
             const errorDiv = document.getElementById('loginError');
             
-            if (!user) {
-                errorDiv.textContent = '❌ המייל לא רשום במערכת';
+            try {
+                errorDiv.classList.remove('show');
+                await auth.signInWithEmailAndPassword(email, password);
+                // onAuthStateChanged will handle the rest
+            } catch (error) {
+                console.error('Login error:', error);
+                let message = '❌ שגיאה בהתחברות';
+                
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                        message = '❌ המייל לא רשום במערכת';
+                        break;
+                    case 'auth/wrong-password':
+                        message = '❌ הסיסמה שגויה';
+                        break;
+                    case 'auth/invalid-email':
+                        message = '❌ כתובת מייל לא תקינה';
+                        break;
+                    case 'auth/too-many-requests':
+                        message = '❌ יותר מדי ניסיונות. נסה שוב מאוחר יותר';
+                        break;
+                }
+                
+                errorDiv.textContent = message;
                 errorDiv.classList.add('show');
-                return;
             }
-            
-            if (user.password !== password) {
-                errorDiv.textContent = '❌ הסיסמה שגויה';
-                errorDiv.classList.add('show');
-                return;
-            }
-            
-            currentUser = user;
-            localStorage.setItem('currentUser', JSON.stringify(user));
-            showApp();
         });
 
-        // Register Form
-        document.getElementById('registerForm').addEventListener('submit', function(e) {
+        // Register Form - Firebase
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const name = document.getElementById('registerName').value;
             const email = document.getElementById('registerEmail').value;
             const password = document.getElementById('registerPassword').value;
-            
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-            
             const errorDiv = document.getElementById('registerError');
             
-            // Check if user already exists
-            if (users.find(u => u.email === email)) {
-                errorDiv.textContent = '❌ המייל כבר רשום במערכת';
-                errorDiv.classList.add('show');
-                return;
-            }
-            
-            // Check if this is the first user (becomes main admin)
-            let role = 'user';
-            if (users.length === 0) {
-                role = 'admin';
-                // Add first user's email to approved list
-                approvedEmails.push(email);
-                localStorage.setItem('approvedEmails', JSON.stringify(approvedEmails));
-            } else {
-                // Check if email is approved
-                if (!approvedEmails.includes(email)) {
-                    errorDiv.textContent = '❌ המייל לא מאושר להרשמה. פנה למנהל המערכת.';
-                    errorDiv.classList.add('show');
-                    return;
+            try {
+                errorDiv.classList.remove('show');
+                
+                // Check if this is the first user
+                const usersSnapshot = await db.collection('users').get();
+                const isFirstUser = usersSnapshot.empty;
+                
+                let role = 'user';
+                
+                if (isFirstUser) {
+                    // First user becomes admin
+                    role = 'admin';
+                } else {
+                    // Check if email is approved
+                    const approvedDoc = await db.collection('approvedEmails').doc(email).get();
+                    if (!approvedDoc.exists) {
+                        errorDiv.textContent = '❌ המייל לא מאושר להרשמה. פנה למנהל המערכת.';
+                        errorDiv.classList.add('show');
+                        return;
+                    }
                 }
+                
+                // Create Firebase user
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                const user = userCredential.user;
+                
+                // Update display name
+                await user.updateProfile({ displayName: name });
+                
+                // Create user document in Firestore
+                await db.collection('users').doc(user.uid).set({
+                    name: name,
+                    email: email,
+                    role: role,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // If first user, add email to approved list
+                if (isFirstUser) {
+                    await db.collection('approvedEmails').doc(email).set({
+                        addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        addedBy: 'system'
+                    });
+                }
+                
+                // Mark email as registered
+                await db.collection('approvedEmails').doc(email).update({
+                    registered: true,
+                    registeredAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // onAuthStateChanged will handle showing the app
+                
+            } catch (error) {
+                console.error('Registration error:', error);
+                let message = '❌ שגיאה בהרשמה';
+                
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        message = '❌ המייל כבר רשום במערכת';
+                        break;
+                    case 'auth/invalid-email':
+                        message = '❌ כתובת מייל לא תקינה';
+                        break;
+                    case 'auth/weak-password':
+                        message = '❌ הסיסמה חלשה מדי. השתמש לפחות ב-6 תווים';
+                        break;
+                }
+                
+                errorDiv.textContent = message;
+                errorDiv.classList.add('show');
             }
-            
-            const newUser = {
-                id: Date.now(),
-                name,
-                email,
-                password,
-                role,
-                isFirstAdmin: users.length === 0
-            };
-            
-            users.push(newUser);
-            localStorage.setItem('users', JSON.stringify(users));
-            
-            currentUser = newUser;
-            localStorage.setItem('currentUser', JSON.stringify(newUser));
-            showApp();
         });
 
+        // Logout - Firebase
         function logout() {
-            localStorage.removeItem('currentUser');
-            currentUser = null;
-            showLogin();
+            auth.signOut().then(() => {
+                currentUser = null;
+                showLogin();
+            }).catch(error => {
+                console.error('Logout error:', error);
+            });
         }
 
         function showApp() {
