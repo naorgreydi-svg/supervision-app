@@ -3325,7 +3325,7 @@ async function deleteInspection(event, inspectionId) {
         if (!localStorage.getItem('projects')) {
             localStorage.setItem('projects', JSON.stringify([]));
         }
-    <async function uploadFileToStorage(file, folderPath) {
+            async function uploadFileToStorage(file, folderPath) {
             try {
                 // יצירת שם ייחודי לקובץ (זמן + שם מקורי)
                 const fileName = `${Date.now()}_${file.name}`;
