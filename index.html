@@ -2310,15 +2310,15 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
         }
 
         // Inspections Management
-     // --- קוד חדש: טעינת פיקוחים מהענן ---
-async function loadInspections() {
-    const list = document.getElementById('inspectionList');
-    const searchTerm = document.getElementById('inspectionSearch') ? document.getElementById('inspectionSearch').value.toLowerCase() : '';
+       // --- קוד חדש: טעינת פיקוחים מהענן ---
+       async function loadInspections() {
+          const list = document.getElementById('inspectionList');
+          const searchTerm = document.getElementById('inspectionSearch') ? document.getElementById('inspectionSearch').value.toLowerCase() : '';
     
-    // אם אין פרויקט פעיל, אי אפשר לטעון
-    if (!currentProject || !currentProject.id) return;
+      // אם אין פרויקט פעיל, אי אפשר לטעון
+          if (!currentProject || !currentProject.id) return;
 
-    list.innerHTML = '<div style="text-align:center; padding:10px;">טוען פיקוחים... ⏳</div>';
+          list.innerHTML = '<div style="text-align:center; padding:10px;">טוען פיקוחים... ⏳</div>';
 
     try {
         // שליפה מתת-התיקייה בענן
@@ -2391,27 +2391,27 @@ async function loadInspections() {
         }
 
         // --- קוד חדש: הוספת פיקוח לענן ---
-document.getElementById('addInspectionForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
+         document.getElementById('addInspectionForm').addEventListener('submit', async function(e) {
+         e.preventDefault();
 
-    const name = document.getElementById('inspectionName').value;
-    const date = document.getElementById('inspectionDate').value;
-    const notes = document.getElementById('inspectionNotes').value;
+         const name = document.getElementById('inspectionName').value;
+         const date = document.getElementById('inspectionDate').value;
+         const notes = document.getElementById('inspectionNotes').value;
 
-    if (!name || !date) {
-        alert("נא למלא שם ותאריך");
-        return;
+         if (!name || !date) {
+         alert("נא למלא שם ותאריך");
+         return;
     }
 
-    // כפתור טעינה
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
-    submitBtn.textContent = 'שומר... ⏳';
-    submitBtn.disabled = true;
+         // כפתור טעינה
+         const submitBtn = e.target.querySelector('button[type="submit"]');
+         const originalText = submitBtn.textContent;
+         submitBtn.textContent = 'שומר... ⏳';
+         submitBtn.disabled = true;
 
-    try {
-        // שמירה בתת-תיקייה 'inspections' בתוך הפרויקט הנוכחי
-        await db.collection('projects')
+         try {
+            // שמירה בתת-תיקייה 'inspections' בתוך הפרויקט הנוכחי
+             await db.collection('projects')
                 .doc(currentProject.id) // מזהה הפרויקט
                 .collection('inspections') // שם תת-התיקייה
                 .add({
