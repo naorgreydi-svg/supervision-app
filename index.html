@@ -2497,40 +2497,71 @@ async function deleteInspection(event, inspectionId) {
     }
 });
 
-        function openInspection(inspectionId) {
-            currentInspection = currentProject.inspections.find(i => i.id === inspectionId);
-            
-            if (!currentInspection) return;
-            
-            document.getElementById('inspectionDetailsTitle').textContent = currentInspection.name;
-            document.getElementById('inspectionDetailsDate').textContent = '📅 ' + new Date(currentInspection.date).toLocaleDateString('he-IL');
-            document.getElementById('inspectionDetailsNotes').textContent = currentInspection.notes || '';
-            
-            defectCounter = currentInspection.defects ? currentInspection.defects.length : 0;
-            
-            const uploadArea = document.querySelector('.upload-area');
+        
+          async function openInspection(inspectionId) {
+    console.log("מנסה לפתוח פיקוח:", inspectionId);
+
+    try {
+        // 1. שליפת הפיקוח הספציפי מהענן (מתוך תת-האוסף inspections)
+        const doc = await db.collection('projects')
+            .doc(currentProject.id)
+            .collection('inspections')
+            .doc(inspectionId)
+            .get();
+
+        if (!doc.exists) {
+            alert("❌ הפיקוח לא נמצא במערכת");
+            return;
+        }
+
+        // 2. עדכון המשתנה הגלובלי עם המידע מהענן
+        currentInspection = { id: doc.id, ...doc.data() };
+
+        // 3. עדכון הכותרות והפרטים במסך
+        document.getElementById('inspectionDetailsTitle').textContent = currentInspection.name;
+        document.getElementById('inspectionDetailsDate').textContent = '📅 ' + new Date(currentInspection.date).toLocaleDateString('he-IL');
+        document.getElementById('inspectionDetailsNotes').textContent = currentInspection.notes || '';
+
+        // 4. טיפול בתצוגת ה-PDF (אם יש או אין)
+        const uploadArea = document.querySelector('.upload-area');
+        const pdfSection = document.getElementById('pdfViewerSection');
+        
+        // איפוס מונה הליקויים לפי מה שקיים בפיקוח
+        defectCounter = (currentInspection.defects && currentInspection.defects.length > 0) 
+            ? Math.max(...currentInspection.defects.map(d => d.number)) 
+            : 0;
+
+        if (currentInspection.pdfData) {
+            // אם יש PDF שמור
+            uploadArea.style.display = 'none';
+            pdfSection.style.display = 'block';
+            loadPdf(currentInspection.pdfData);
+        } else {
+            // אם אין PDF
             uploadArea.style.display = 'block';
+            // איפוס תוכן אזור ההעלאה למצב התחלתי
             uploadArea.innerHTML = `
                 <h3>📄 העלה תוכנית PDF</h3>
                 <p>לחץ או גרור קובץ לכאן</p>
                 <small style="color: #999; margin-top: 10px; display: block;">מגבלת גודל: 20MB</small>
             `;
-            
-            if (currentInspection.pdfData) {
-                uploadArea.style.display = 'none';
-                loadPdf(currentInspection.pdfData);
-                document.getElementById('pdfViewerSection').style.display = 'block';
-            } else {
-                document.getElementById('pdfViewerSection').style.display = 'none';
-            }
-            
-            loadDefects();
-            
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById('inspectionDetailsTab').classList.add('active');
+            pdfSection.style.display = 'none';
         }
+
+        // 5. טעינת רשימת הליקויים בצד
+        loadDefects();
+
+        // 6. מעבר לטאב של פרטי הפיקוח
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById('inspectionDetailsTab').classList.add('active');
+
+    } catch (error) {
+        console.error("Error opening inspection:", error);
+        alert("שגיאה בפתיחת הפיקוח: " + error.message);
+    }
+}
 
         function backToProjectDetails() {
             currentInspection = null;
