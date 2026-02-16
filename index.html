@@ -26,7 +26,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, rgb(200, 230, 255) 0%, #ffffff 100%);
             min-height: 100vh;
             direction: rtl;
         }
@@ -55,7 +55,7 @@
         }
 
         .auth-box h1 {
-            color: #667eea;
+            color: C8E6FF;
             margin-bottom: 10px;
             text-align: center;
             font-size: 28px;
@@ -93,7 +93,7 @@
 
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: C8E6FF;
         }
 
         .eye-icon {
@@ -123,7 +123,7 @@
         .btn {
             width: 100%;
             padding: 14px;
-            background: #667eea;
+            background: C8E6FF;
             color: white;
             border: none;
             border-radius: 8px;
@@ -153,7 +153,7 @@
         }
 
         .switch-auth a {
-            color: #667eea;
+            color: C8E6FF;
             text-decoration: none;
             font-weight: 600;
         }
@@ -183,7 +183,7 @@
         }
 
         .header h1 {
-            color: #667eea;
+            color: C8E6FF;
             font-size: 24px;
         }
 
@@ -195,7 +195,7 @@
 
         .user-badge {
             padding: 6px 12px;
-            background: #667eea;
+            background: C8E6FF;
             color: white;
             border-radius: 20px;
             font-size: 14px;
@@ -250,7 +250,7 @@
         }
 
         .nav-tab.active {
-            background: #667eea;
+            background: C8E6FF;
             color: white;
         }
 
@@ -354,7 +354,7 @@
 
         textarea:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: C8E6FF;
         }
 
         /* User Management */
@@ -422,12 +422,12 @@
         }
 
         .project-card:hover {
-            border-color: #667eea;
+            border-color: C8E6FF;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
         }
 
         .project-card h3 {
-            color: #667eea;
+            color: C8E6FF;
             margin-bottom: 10px;
         }
 
@@ -447,7 +447,7 @@
 
         .search-box:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: C8E6FF;
         }
 
         /* Modal */
@@ -486,7 +486,7 @@
         }
 
         .modal-header h2 {
-            color: #667eea;
+            color: C8E6FF;
         }
 
         .close-modal {
@@ -519,7 +519,7 @@
 
         .inspection-item:hover {
             background: #f8f9fa;
-            border-color: #667eea;
+            border-color: C8E6FF;
         }
 
         .inspection-info h4 {
@@ -548,7 +548,7 @@
         }
 
         .pdf-toolbar {
-            background: #667eea;
+            background: C8E6FF;
             padding: 15px;
             display: flex;
             gap: 10px;
@@ -620,7 +620,7 @@
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 15px;
-            border-right: 4px solid #667eea;
+            border-right: 4px solid C8E6FF;
         }
 
         .defect-item.low {
@@ -643,7 +643,7 @@
         }
 
         .defect-number {
-            background: #667eea;
+            background: C8E6FF;
             color: white;
             width: 30px;
             height: 30px;
@@ -703,7 +703,7 @@
 
         .btn-export {
             padding: 12px 24px;
-            background: #667eea;
+            background: C8E6FF;
             color: white;
             border: none;
             border-radius: 8px;
@@ -731,7 +731,7 @@
         }
 
         .upload-area {
-            border: 2px dashed #667eea;
+            border: 2px dashed C8E6FF;
             border-radius: 12px;
             padding: 40px;
             text-align: center;
@@ -764,7 +764,7 @@
 
         select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: C8E6FF;
         }
 
         .back-button {
@@ -1518,18 +1518,33 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-            // Firebase Auth State Observer
-            auth.onAuthStateChanged(user => {
-                if (user) {
-                    console.log('✅ User logged in:', user.email);
-                    loadUserDataFromFirebase(user);
-                } else {
-                    console.log('❌ No user logged in');
-                    showLogin();
-                }
-            });
-        });
+    // 1. אתחול פיירבייס (אם עדיין לא אותחל)
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    
+    // 2. המאזין הקריטי - מחכה שהמשתמש יתחבר
+    firebase.auth().onAuthStateChanged(async (user) => {
+        if (user) {
+            console.log('✅ משתמש זוהה:', user.email);
+            
+            // טעינת פרטי המשתמש (פונקציה קיימת שלך)
+            await loadUserDataFromFirebase(user);
+
+            // === כאן התיקון החשוב! ===
+            // אנחנו קוראים לטעינת הפרויקטים *רק* אחרי שיש משתמש
+            console.log('מתחיל טעינת פרויקטים...');
+            loadProjects(); 
+            
+            // אם יש לך פונקציות נוספות שצריכות לרוץ בהתחלה, שים אותן כאן
+            // למשל: loadUsers(); אם המשתמש הוא מנהל
+            
+        } else {
+            console.log('❌ לא מחובר');
+            showLogin(); // מציג את מסך ההתחברות
+        }
+    });
+});
 
         // Load user data from Firestore
         async function loadUserDataFromFirebase(user) {
@@ -2902,7 +2917,7 @@
                     };
                     
                     defectsHtml.innerHTML = `
-                        <h1 style="text-align: center; color: #667eea; margin-bottom: 30px;">רשימת ליקויים</h1>
+                        <h1 style="text-align: center; color: C8E6FF; margin-bottom: 30px;">רשימת ליקויים</h1>
                         <div style="margin-bottom: 20px;">
                             <p><strong>פרויקט:</strong> ${currentProject.name}</p>
                             <p><strong>פיקוח:</strong> ${currentInspection.name}</p>
@@ -2925,7 +2940,7 @@
                             return `
                             <div style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; page-break-inside: avoid;">
                                 <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                                    <div style="background: #667eea; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-left: 10px;">${defect.number}</div>
+                                    <div style="background: C8E6FF; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-left: 10px;">${defect.number}</div>
                                     <div>
                                         <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${defect.description}</div>
                                         <div style="display: inline-block; padding: 5px 15px; border-radius: 15px; background: ${severityColors[defect.severity]}; color: white; font-size: 12px; font-weight: bold;">${severityText[defect.severity]}</div>
