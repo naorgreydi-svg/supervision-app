@@ -1565,33 +1565,22 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-    // 1. אתחול פיירבייס (אם עדיין לא אותחל)
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    
-    // 2. המאזין הקריטי - מחכה שהמשתמש יתחבר
-    firebase.auth().onAuthStateChanged(async (user) => {
-        if (user) {
-            console.log('✅ משתמש זוהה:', user.email);
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
             
-            // טעינת פרטי המשתמש (פונקציה קיימת שלך)
-            await loadUserDataFromFirebase(user);
-
-            // === כאן התיקון החשוב! ===
-            // אנחנו קוראים לטעינת הפרויקטים *רק* אחרי שיש משתמש
-            console.log('מתחיל טעינת פרויקטים...');
-            loadProjects(); 
-            
-            // אם יש לך פונקציות נוספות שצריכות לרוץ בהתחלה, שים אותן כאן
-            // למשל: loadUsers(); אם המשתמש הוא מנהל
-            
-        } else {
-            console.log('❌ לא מחובר');
-            showLogin(); // מציג את מסך ההתחברות
-        }
-    });
-});
+            firebase.auth().onAuthStateChanged(async (user) => {
+                if (user) {
+                    console.log('✅ משתמש זוהה:', user.email);
+                    await loadUserDataFromFirebase(user);
+                    console.log('מתחיל טעינת פרויקטים...');
+                    loadProjects(); 
+                } else {
+                    console.log('❌ לא מחובר');
+                    showLogin();
+                }
+            });
+        });
 
         // Load user data from Firestore
         async function loadUserDataFromFirebase(user) {
@@ -1606,7 +1595,6 @@
                         role: userDoc.data().role || 'user'
                     };
                 } else {
-                    // First time login - create user document
                     currentUser = {
                         uid: user.uid,
                         email: user.email,
@@ -1614,7 +1602,6 @@
                         role: 'user'
                     };
                     
-                    // Check if first user - make admin
                     const usersSnapshot = await db.collection('users').get();
                     if (usersSnapshot.empty) {
                         currentUser.role = 'admin';
@@ -1647,7 +1634,6 @@
             input.type = input.type === 'password' ? 'text' : 'password';
         }
 
-        // Login Form
         // Login Form - Firebase
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -1659,7 +1645,6 @@
             try {
                 errorDiv.classList.remove('show');
                 await auth.signInWithEmailAndPassword(email, password);
-                // onAuthStateChanged will handle the rest
             } catch (error) {
                 console.error('Login error:', error);
                 let message = '❌ שגיאה בהתחברות';
@@ -1696,17 +1681,14 @@
             try {
                 errorDiv.classList.remove('show');
                 
-                // Check if this is the first user
                 const usersSnapshot = await db.collection('users').get();
                 const isFirstUser = usersSnapshot.empty;
                 
                 let role = 'user';
                 
                 if (isFirstUser) {
-                    // First user becomes admin
                     role = 'admin';
                 } else {
-                    // Check if email is approved
                     const approvedDoc = await db.collection('approvedEmails').doc(email).get();
                     if (!approvedDoc.exists) {
                         errorDiv.textContent = '❌ המייל לא מאושר להרשמה. פנה למנהל המערכת.';
@@ -1715,14 +1697,11 @@
                     }
                 }
                 
-                // Create Firebase user
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 const user = userCredential.user;
                 
-                // Update display name
                 await user.updateProfile({ displayName: name });
                 
-                // Create user document in Firestore
                 await db.collection('users').doc(user.uid).set({
                     name: name,
                     email: email,
@@ -1730,7 +1709,6 @@
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 
-                // If first user, add email to approved list
                 if (isFirstUser) {
                     await db.collection('approvedEmails').doc(email).set({
                         addedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1738,13 +1716,10 @@
                     });
                 }
                 
-                // Mark email as registered
                 await db.collection('approvedEmails').doc(email).update({
                     registered: true,
                     registeredAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                
-                // onAuthStateChanged will handle showing the app
                 
             } catch (error) {
                 console.error('Registration error:', error);
@@ -1810,19 +1785,16 @@
 
         // Navigation
         function showTab(tabName) {
-            // Update tab buttons
             document.querySelectorAll('.nav-tab').forEach(btn => {
                 btn.classList.remove('active');
             });
             event.target.classList.add('active');
             
-            // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
             document.getElementById(tabName + 'Tab').classList.add('active');
             
-            // Load data for specific tabs
             if (tabName === 'emails') {
                 loadApprovedEmails();
             } else if (tabName === 'users') {
@@ -1832,67 +1804,89 @@
             }
         }
 
-        // Email Management
-        function loadApprovedEmails() {
-    // 1. שליפת נתונים
-    let approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const searchTerm = document.getElementById('emailSearch') ? document.getElementById('emailSearch').value.toLowerCase() : '';
-    const emailList = document.getElementById('emailList');
-    
-    emailList.innerHTML = '';
-    
-    if (approvedEmails.length === 0) {
-        emailList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין מיילים מאושרים עדיין.</p>';
-        return;
-    }
+        // ===== תיקון #1: טעינת מיילים מאושרים מ-Firebase =====
+        async function loadApprovedEmails() {
+            try {
+                const searchTerm = document.getElementById('emailSearch') ? document.getElementById('emailSearch').value.toLowerCase() : '';
+                const emailList = document.getElementById('emailList');
+                
+                emailList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">⏳ טוען מיילים...</p>';
+                
+                // שלב 1: שליפת כל המיילים המאושרים מ-Firestore
+                const approvedSnapshot = await db.collection('approvedEmails').get();
+                const approvedEmails = [];
+                approvedSnapshot.forEach(doc => {
+                    approvedEmails.push({
+                        email: doc.id,
+                        ...doc.data()
+                    });
+                });
+                
+                // שלב 2: שליפת כל המשתמשים הרשומים מ-Firestore
+                const usersSnapshot = await db.collection('users').get();
+                const usersMap = {};
+                usersSnapshot.forEach(doc => {
+                    const userData = doc.data();
+                    usersMap[userData.email] = userData;
+                });
+                
+                emailList.innerHTML = '';
+                
+                if (approvedEmails.length === 0) {
+                    emailList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין מיילים מאושרים עדיין.</p>';
+                    return;
+                }
 
-    // 2. מיון: מיילים שלא נרשמו (pending) יהיו למעלה
-    approvedEmails.sort((a, b) => {
-        const userA = users.find(u => u.email === a);
-        const userB = users.find(u => u.email === b);
-        // אם A לא רשום ו-B כן רשום -> A בא קודם (-1)
-        if (!userA && userB) return -1;
-        if (userA && !userB) return 1;
-        return 0; // אחרת לא משנים סדר
-    });
+                // שלב 3: מיון - מיילים שלא נרשמו למעלה
+                approvedEmails.sort((a, b) => {
+                    const userA = usersMap[a.email];
+                    const userB = usersMap[b.email];
+                    if (!userA && userB) return -1;
+                    if (userA && !userB) return 1;
+                    return 0;
+                });
 
-    // 3. סינון לפי חיפוש
-    const filteredEmails = approvedEmails.filter(email => email.toLowerCase().includes(searchTerm));
+                // שלב 4: סינון לפי חיפוש
+                const filteredEmails = approvedEmails.filter(item => 
+                    item.email.toLowerCase().includes(searchTerm)
+                );
 
-    // 4. הצגה על המסך
-    filteredEmails.forEach(email => {
-        const user = users.find(u => u.email === email);
-        const div = document.createElement('div');
-        div.className = 'email-item';
-        
-        let roleInfo = '';
-        let canDelete = true; // ברירת מחדל
-        
-        if (user) {
-            // המשתמש כבר נרשם
-            if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי ✓</span>';
-            else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה ✓</span>';
-            else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש ✓</span>';
-            
-            // אי אפשר למחוק אדמינים (אלא אם אתה אדמין אחר)
-            if (user.role === 'admin' && currentUser.email !== user.email) canDelete = false; 
-        } else {
-            // טרם נרשם (יופיע למעלה)
-            roleInfo = '<span class="user-badge" style="background: #6c757d;">⏳ ממתין להרשמה</span>';
+                // שלב 5: הצגה
+                filteredEmails.forEach(item => {
+                    const email = item.email;
+                    const user = usersMap[email];
+                    const div = document.createElement('div');
+                    div.className = 'email-item';
+                    
+                    let roleInfo = '';
+                    let canDelete = true;
+                    
+                    if (user) {
+                        if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי ✓</span>';
+                        else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה ✓</span>';
+                        else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש ✓</span>';
+                        
+                        if (user.role === 'admin' && currentUser.email !== user.email) canDelete = false;
+                    } else {
+                        roleInfo = '<span class="user-badge" style="background: #6c757d;">⏳ ממתין להרשמה</span>';
+                    }
+                    
+                    div.innerHTML = `
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            <span class="email" style="font-size: 16px; font-weight: bold;">${email}</span>
+                            <div>${roleInfo}</div>
+                        </div>
+                        ${canDelete ? `<button class="btn-delete" onclick="deleteEmail('${email}')">מחק</button>` : ''}
+                    `;
+                    
+                    emailList.appendChild(div);
+                });
+                
+            } catch (error) {
+                console.error('Error loading emails:', error);
+                document.getElementById('emailList').innerHTML = '<p style="text-align: center; color: #c00; padding: 40px;">❌ שגיאה בטעינת מיילים</p>';
+            }
         }
-        
-        div.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 5px;">
-                <span class="email" style="font-size: 16px; font-weight: bold;">${email}</span>
-                <div>${roleInfo}</div>
-            </div>
-            ${canDelete ? `<button class="btn-delete" onclick="deleteEmail('${email}')">מחק</button>` : ''}
-        `;
-        
-        emailList.appendChild(div);
-    });
-}
 
         function openAddEmailModal() {
             document.getElementById('addEmailModal').classList.add('active');
@@ -1902,7 +1896,8 @@
             document.getElementById('bulkEmailModal').classList.add('active');
         }
 
-        document.getElementById('addEmailForm').addEventListener('submit', function(e) {
+        // ===== תיקון #2: הוספת מייל בודד ל-Firestore =====
+        document.getElementById('addEmailForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const email = document.getElementById('newEmail').value.trim();
@@ -1912,25 +1907,35 @@
                 return;
             }
             
-            const approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-            
-            if (approvedEmails.includes(email)) {
-                alert('⚠️ המייל כבר קיים ברשימה');
+            try {
+                const emailDoc = await db.collection('approvedEmails').doc(email).get();
+                
+                if (emailDoc.exists) {
+                    alert('⚠️ המייל כבר קיים ברשימה');
+                    closeModal('addEmailModal');
+                    document.getElementById('addEmailForm').reset();
+                    return;
+                }
+                
+                await db.collection('approvedEmails').doc(email).set({
+                    addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    addedBy: currentUser.email,
+                    registered: false
+                });
+                
+                loadApprovedEmails();
+                alert('✅ המייל נוסף בהצלחה!');
                 closeModal('addEmailModal');
                 document.getElementById('addEmailForm').reset();
-                return;
+                
+            } catch (error) {
+                console.error('Error adding email:', error);
+                alert('❌ שגיאה בהוספת מייל');
             }
-            
-            approvedEmails.push(email);
-            localStorage.setItem('approvedEmails', JSON.stringify(approvedEmails));
-            loadApprovedEmails();
-            
-            alert('✅ המייל נוסף בהצלחה!');
-            closeModal('addEmailModal');
-            document.getElementById('addEmailForm').reset();
         });
 
-        document.getElementById('bulkEmailForm').addEventListener('submit', function(e) {
+        // ===== תיקון #3: הוספת מיילים מרובים ל-Firestore =====
+        document.getElementById('bulkEmailForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const bulkText = document.getElementById('bulkEmails').value;
@@ -1943,122 +1948,162 @@
                 return;
             }
             
-            const approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-            let addedCount = 0;
-            let duplicateCount = 0;
-            
-            emails.forEach(email => {
-                if (!approvedEmails.includes(email)) {
-                    approvedEmails.push(email);
-                    addedCount++;
-                } else {
-                    duplicateCount++;
+            try {
+                let addedCount = 0;
+                let duplicateCount = 0;
+                
+                const batch = db.batch();
+                
+                for (const email of emails) {
+                    const emailDoc = await db.collection('approvedEmails').doc(email).get();
+                    
+                    if (!emailDoc.exists) {
+                        const emailRef = db.collection('approvedEmails').doc(email);
+                        batch.set(emailRef, {
+                            addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            addedBy: currentUser.email,
+                            registered: false
+                        });
+                        addedCount++;
+                    } else {
+                        duplicateCount++;
+                    }
                 }
-            });
-            
-            localStorage.setItem('approvedEmails', JSON.stringify(approvedEmails));
-            loadApprovedEmails();
-            
-            let message = `✅ נוספו ${addedCount} מיילים חדשים`;
-            if (duplicateCount > 0) {
-                message += `\n⚠️ ${duplicateCount} מיילים כבר היו ברשימה`;
+                
+                await batch.commit();
+                
+                loadApprovedEmails();
+                
+                let message = `✅ נוספו ${addedCount} מיילים חדשים`;
+                if (duplicateCount > 0) {
+                    message += `\n⚠️ ${duplicateCount} מיילים כבר היו ברשימה`;
+                }
+                
+                alert(message);
+                closeModal('bulkEmailModal');
+                document.getElementById('bulkEmailForm').reset();
+                
+            } catch (error) {
+                console.error('Error adding bulk emails:', error);
+                alert('❌ שגיאה בהוספת מיילים');
             }
-            
-            alert(message);
-            closeModal('bulkEmailModal');
-            document.getElementById('bulkEmailForm').reset();
         });
 
-        function deleteEmail(email) {
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const user = users.find(u => u.email === email);
-            
-            let confirmMessage = `האם למחוק את המייל:\n${email}`;
-            if (user) {
-                confirmMessage += `\n\nהמשתמש ${user.name} כבר נרשם למערכת.\nמחיקת המייל לא תמחק את החשבון שלו.`;
-            }
-            
-            if (!confirm(confirmMessage)) return;
-            
-            const approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-            const index = approvedEmails.indexOf(email);
-            
-            if (index > -1) {
-                approvedEmails.splice(index, 1);
-                localStorage.setItem('approvedEmails', JSON.stringify(approvedEmails));
+        // ===== תיקון #4: מחיקת מייל מ-Firestore =====
+        async function deleteEmail(email) {
+            try {
+                const usersSnapshot = await db.collection('users').where('email', '==', email).get();
+                let user = null;
+                usersSnapshot.forEach(doc => {
+                    user = doc.data();
+                });
+                
+                let confirmMessage = `האם למחוק את המייל:\n${email}`;
+                if (user) {
+                    confirmMessage += `\n\nהמשתמש ${user.name} כבר נרשם למערכת.\nמחיקת המייל לא תמחק את החשבון שלו.`;
+                }
+                
+                if (!confirm(confirmMessage)) return;
+                
+                await db.collection('approvedEmails').doc(email).delete();
+                
                 loadApprovedEmails();
                 alert('✅ המייל נמחק מהרשימה');
+                
+            } catch (error) {
+                console.error('Error deleting email:', error);
+                alert('❌ שגיאה במחיקת מייל');
             }
         }
 
-        // User Management
-        function loadUsers() {
-    // 1. שליפת נתונים
-    let users = JSON.parse(localStorage.getItem('users') || '[]');
-    const userList = document.getElementById('userList');
-    const searchTerm = document.getElementById('userSearch') ? document.getElementById('userSearch').value.toLowerCase() : '';
-    
-    userList.innerHTML = '';
-    
-    // 2. מיון לפי דרגות (אדמין -> מנהל משנה -> משתמש)
-    const roleWeight = { 'admin': 3, 'moderator': 2, 'user': 1 };
-    
-    users.sort((a, b) => {
-        return roleWeight[b.role] - roleWeight[a.role];
-    });
+        // ===== תיקון #5: טעינת משתמשים מ-Firestore =====
+        async function loadUsers() {
+            try {
+                const userList = document.getElementById('userList');
+                const searchTerm = document.getElementById('userSearch') ? document.getElementById('userSearch').value.toLowerCase() : '';
+                
+                userList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">⏳ טוען משתמשים...</p>';
+                
+                const usersSnapshot = await db.collection('users').get();
+                const users = [];
+                
+                usersSnapshot.forEach(doc => {
+                    const userData = doc.data();
+                    users.push({
+                        uid: doc.id,
+                        ...userData
+                    });
+                });
+                
+                userList.innerHTML = '';
+                
+                if (users.length === 0) {
+                    userList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין משתמשים רשומים.</p>';
+                    return;
+                }
+                
+                const roleWeight = { 'admin': 3, 'moderator': 2, 'user': 1 };
+                users.sort((a, b) => roleWeight[b.role] - roleWeight[a.role]);
 
-    // 3. סינון לפי חיפוש (שם או מייל)
-    const filteredUsers = users.filter(user => 
-        user.name.toLowerCase().includes(searchTerm) || 
-        user.email.toLowerCase().includes(searchTerm)
-    );
+                const filteredUsers = users.filter(user => 
+                    user.name.toLowerCase().includes(searchTerm) || 
+                    user.email.toLowerCase().includes(searchTerm)
+                );
 
-    // 4. הצגה
-    filteredUsers.forEach(user => {
-        const div = document.createElement('div');
-        div.className = 'user-item';
-        
-        let roleInfo = '';
-        if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי</span>';
-        else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה</span>';
-        else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש</span>';
-        
-        // כפתורי פעולה (רק למנהל ראשי, ולא על עצמו)
-        let actionButtons = '';
-        if (currentUser && currentUser.role === 'admin' && user.uid !== currentUser.uid) {
-            if (user.role === 'user') {
-                actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #ffc107; color: black; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'moderator')">הפוך למנהל משנה</button>`;
-            } else if (user.role === 'moderator') {
-                actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #6c757d; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'user')">הורד למשתמש</button>`;
+                filteredUsers.forEach(user => {
+                    const div = document.createElement('div');
+                    div.className = 'user-item';
+                    
+                    let roleInfo = '';
+                    if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי</span>';
+                    else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה</span>';
+                    else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש</span>';
+                    
+                    let actionButtons = '';
+                    if (currentUser && currentUser.role === 'admin' && user.uid !== currentUser.uid) {
+                        if (user.role === 'user') {
+                            actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #ffc107; color: black; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'moderator')">הפוך למנהל משנה</button>`;
+                        } else if (user.role === 'moderator') {
+                            actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #6c757d; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'user')">הורד למשתמש</button>`;
+                        }
+                    }
+                    
+                    div.innerHTML = `
+                        <div class="user-item-info">
+                            <div>
+                                <strong>${user.name}</strong><br>
+                                <small>${user.email}</small>
+                            </div>
+                            ${roleInfo}
+                        </div>
+                        <div>${actionButtons}</div>
+                    `;
+                    
+                    userList.appendChild(div);
+                });
+                
+            } catch (error) {
+                console.error('Error loading users:', error);
+                document.getElementById('userList').innerHTML = '<p style="text-align: center; color: #c00; padding: 40px;">❌ שגיאה בטעינת משתמשים</p>';
             }
         }
-        
-        div.innerHTML = `
-            <div class="user-item-info">
-                <div>
-                    <strong>${user.name}</strong><br>
-                    <small>${user.email}</small>
-                </div>
-                ${roleInfo}
-            </div>
-            <div>${actionButtons}</div>
-        `;
-        
-        userList.appendChild(div);
-    });
-}
 
-// פונקציית עזר לעדכון תפקיד (צריך לוודא שהיא קיימת אצלך, אם לא - הוסף גם אותה)
-function updateUserRole(userId, newRole) {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const userIndex = users.findIndex(u => u.uid === userId);
-    if (userIndex > -1) {
-        users[userIndex].role = newRole;
-        localStorage.setItem('users', JSON.stringify(users));
-        loadUsers(); // רענון הרשימה
-        loadApprovedEmails(); // רענון גם של מסך המיילים כי הדרגה השתנתה
-    }
-}
+        // ===== תיקון #6: עדכון תפקיד משתמש ב-Firestore =====
+        async function updateUserRole(userId, newRole) {
+            try {
+                await db.collection('users').doc(userId).update({
+                    role: newRole
+                });
+                
+                loadUsers();
+                loadApprovedEmails();
+                alert('✅ התפקיד עודכן בהצלחה');
+                
+            } catch (error) {
+                console.error('Error updating user role:', error);
+                alert('❌ שגיאה בעדכון תפקיד');
+            }
+        }
 
         // Projects Management
         function loadProjects() {
@@ -2150,7 +2195,6 @@ function updateUserRole(userId, newRole) {
             
             loadInspections();
             
-            // Hide other tabs and show project details
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
@@ -2217,7 +2261,6 @@ function updateUserRole(userId, newRole) {
             
             currentProject.inspections.push(newInspection);
             
-            // Save to localStorage
             const projects = JSON.parse(localStorage.getItem('projects') || '[]');
             const projectIndex = projects.findIndex(p => p.id === currentProject.id);
             projects[projectIndex] = currentProject;
@@ -2237,10 +2280,8 @@ function updateUserRole(userId, newRole) {
             document.getElementById('inspectionDetailsDate').textContent = '📅 ' + new Date(currentInspection.date).toLocaleDateString('he-IL');
             document.getElementById('inspectionDetailsNotes').textContent = currentInspection.notes || '';
             
-            // Reset defect counter
             defectCounter = currentInspection.defects ? currentInspection.defects.length : 0;
             
-            // Reset upload area
             const uploadArea = document.querySelector('.upload-area');
             uploadArea.style.display = 'block';
             uploadArea.innerHTML = `
@@ -2249,7 +2290,6 @@ function updateUserRole(userId, newRole) {
                 <small style="color: #999; margin-top: 10px; display: block;">מגבלת גודל: 20MB</small>
             `;
             
-            // Load PDF if exists
             if (currentInspection.pdfData) {
                 uploadArea.style.display = 'none';
                 loadPdf(currentInspection.pdfData);
@@ -2260,7 +2300,6 @@ function updateUserRole(userId, newRole) {
             
             loadDefects();
             
-            // Hide other tabs and show inspection details
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
             });
@@ -2283,15 +2322,13 @@ function updateUserRole(userId, newRole) {
             const file = event.target.files[0];
             if (!file) return;
             
-            // Check file size (limit to 20MB for localStorage)
-            const maxSize = 20 * 1024 * 1024; // 20MB
+            const maxSize = 20 * 1024 * 1024;
             if (file.size > maxSize) {
                 alert('⚠️ הקובץ גדול מדי!\n\nהמגבלה היא 20MB.\nגודל הקובץ: ' + (file.size / 1024 / 1024).toFixed(2) + 'MB\n\nאנא השתמש בקובץ קטן יותר או דחוס את ה-PDF.');
-                event.target.value = ''; // Reset file input
+                event.target.value = '';
                 return;
             }
             
-            // Show loading message
             const uploadArea = document.querySelector('.upload-area');
             const originalContent = uploadArea.innerHTML;
             uploadArea.innerHTML = '<h3>⏳ טוען קובץ...</h3><p>אנא המתן</p>';
@@ -2302,7 +2339,6 @@ function updateUserRole(userId, newRole) {
                     const pdfData = e.target.result;
                     currentInspection.pdfData = pdfData;
                     
-                    // Try to save
                     try {
                         saveInspection();
                         loadPdf(pdfData);
@@ -2311,7 +2347,6 @@ function updateUserRole(userId, newRole) {
                     } catch (saveError) {
                         console.error('Save error:', saveError);
                         
-                        // Show detailed error message
                         let errorMessage = '❌ שגיאה בשמירה!\n\n';
                         errorMessage += saveError.message || 'הקובץ גדול מדי עבור שמירה מקומית.';
                         errorMessage += '\n\nמה אפשר לעשות:\n';
@@ -2361,7 +2396,6 @@ function updateUserRole(userId, newRole) {
                 return;
             }
             
-            // Reset everything
             currentInspection.pdfData = null;
             currentInspection.defects = [];
             defectCounter = 0;
@@ -2369,7 +2403,6 @@ function updateUserRole(userId, newRole) {
             
             saveInspection();
             
-            // Show upload area again
             const uploadArea = document.querySelector('.upload-area');
             uploadArea.style.display = 'block';
             document.getElementById('pdfViewerSection').style.display = 'none';
@@ -2383,19 +2416,16 @@ function updateUserRole(userId, newRole) {
             
             currentPage = await currentPdf.getPage(1);
             
-            // Calculate scale based on screen size
             const container = document.querySelector('.pdf-canvas-container');
             const containerWidth = container.clientWidth;
             const isMobile = window.innerWidth <= 768;
             
-            // Get natural viewport at scale 1
             const naturalViewport = currentPage.getViewport({ scale: 1 });
             
-            // Calculate scale to fit container width on mobile
             let finalScale = zoomLevel;
             if (isMobile) {
-                const scaleToFit = (containerWidth - 40) / naturalViewport.width; // 40px padding
-                finalScale = zoomLevel * Math.min(scaleToFit, 1); // Don't scale up beyond 100%
+                const scaleToFit = (containerWidth - 40) / naturalViewport.width;
+                finalScale = zoomLevel * Math.min(scaleToFit, 1);
             }
             
             const viewport = currentPage.getViewport({ scale: finalScale });
@@ -2404,7 +2434,6 @@ function updateUserRole(userId, newRole) {
             const drawingCanvas = document.getElementById('drawingCanvas');
             const context = canvas.getContext('2d');
             
-            // Set canvas size
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             drawingCanvas.height = viewport.height;
@@ -2417,7 +2446,6 @@ function updateUserRole(userId, newRole) {
             
             await currentPage.render(renderContext).promise;
             
-            // Redraw all markings
             redrawMarkings();
             
             document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
@@ -2438,7 +2466,6 @@ function updateUserRole(userId, newRole) {
         function selectTool(tool) {
             drawingTool = tool;
             
-            // Update button styles
             document.getElementById('rectBtn').classList.remove('active');
             document.getElementById('circleBtn').classList.remove('active');
             document.getElementById('ovalBtn').classList.remove('active');
@@ -2447,7 +2474,6 @@ function updateUserRole(userId, newRole) {
             if (tool === 'circle') document.getElementById('circleBtn').classList.add('active');
             if (tool === 'oval') document.getElementById('ovalBtn').classList.add('active');
             
-            // Show hint on mobile
             const isMobile = window.innerWidth <= 768;
             if (isMobile) {
                 const toolNames = {
@@ -2455,7 +2481,6 @@ function updateUserRole(userId, newRole) {
                     'circle': 'עיגול',
                     'oval': 'אובלי'
                 };
-                // Could add a temporary tooltip here if needed
             }
         }
 
@@ -2463,7 +2488,6 @@ function updateUserRole(userId, newRole) {
         const drawingCanvas = document.getElementById('drawingCanvas');
         let drawingContext = drawingCanvas.getContext('2d');
 
-        // Mouse events
         drawingCanvas.addEventListener('mousedown', function(e) {
             if (!drawingTool) return;
             
@@ -2494,7 +2518,6 @@ function updateUserRole(userId, newRole) {
             finishDrawing(endX, endY);
         });
 
-        // Touch events for mobile
         drawingCanvas.addEventListener('touchstart', function(e) {
             if (!drawingTool) return;
             e.preventDefault();
@@ -2532,10 +2555,8 @@ function updateUserRole(userId, newRole) {
         });
 
         function drawPreview(currentX, currentY) {
-            // Clear and redraw
             redrawMarkings();
             
-            // Draw preview
             drawingContext.strokeStyle = 'red';
             drawingContext.lineWidth = 3;
             drawingContext.setLineDash([5, 5]);
@@ -2556,7 +2577,6 @@ function updateUserRole(userId, newRole) {
         }
 
         function finishDrawing(endX, endY) {
-            // Create marking
             defectCounter++;
             const marking = {
                 number: defectCounter,
@@ -2569,7 +2589,6 @@ function updateUserRole(userId, newRole) {
             
             tempMarking = marking;
             
-            // Open defect modal
             openAddDefectModal(marking);
             
             drawingTool = null;
@@ -2604,7 +2623,6 @@ function updateUserRole(userId, newRole) {
                     drawingContext.stroke();
                 }
                 
-                // Draw number
                 drawingContext.fillText(m.number, m.startX, m.startY - 5);
             });
         }
@@ -2617,12 +2635,10 @@ function updateUserRole(userId, newRole) {
                 tempMarking = marking;
             }
             
-            // Reset image preview
             document.getElementById('imagePreviewContainer').style.display = 'none';
             document.getElementById('imagePreviewList').innerHTML = '';
         }
 
-        // Image preview handler
         document.getElementById('defectImages').addEventListener('change', function(e) {
             const files = e.target.files;
             const previewContainer = document.getElementById('imagePreviewContainer');
@@ -2669,14 +2685,12 @@ function updateUserRole(userId, newRole) {
                 description: description,
                 severity: severity,
                 marking: tempMarking,
-                images: [] // Array of images
+                images: []
             };
             
-            // Process all images with compression
             if (imageFiles.length > 0) {
                 let processedCount = 0;
                 Array.from(imageFiles).forEach(file => {
-                    // Compress image if larger than 500KB
                     if (file.size > 500 * 1024) {
                         compressImage(file, function(compressedDataUrl) {
                             defect.images.push(compressedDataUrl);
@@ -2687,7 +2701,6 @@ function updateUserRole(userId, newRole) {
                             }
                         });
                     } else {
-                        // Image is small enough, use as is
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             defect.images.push(e.target.result);
@@ -2701,12 +2714,10 @@ function updateUserRole(userId, newRole) {
                     }
                 });
             } else {
-                // No images
                 saveDefect(defect);
             }
         });
 
-        // Image compression function
         function compressImage(file, callback) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -2716,7 +2727,6 @@ function updateUserRole(userId, newRole) {
                     let width = img.width;
                     let height = img.height;
                     
-                    // Resize if too large
                     const maxDimension = 1200;
                     if (width > maxDimension || height > maxDimension) {
                         if (width > height) {
@@ -2734,7 +2744,6 @@ function updateUserRole(userId, newRole) {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Convert to JPEG with quality 0.7
                     const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
                     callback(compressedDataUrl);
                 };
@@ -2781,7 +2790,6 @@ function updateUserRole(userId, newRole) {
                 
                 let imagesHtml = '';
                 
-                // Support both old format (single image) and new format (array of images)
                 const images = defect.images || (defect.image ? [defect.image] : []);
                 
                 if (images.length > 0) {
@@ -2811,7 +2819,6 @@ function updateUserRole(userId, newRole) {
             });
         }
 
-        // Function to show image in modal
         function showImageModal(imageSrc) {
             const modal = document.createElement('div');
             modal.className = 'modal active';
@@ -2862,7 +2869,6 @@ function updateUserRole(userId, newRole) {
                 localStorage.setItem('projects', dataToSave);
             } catch (e) {
                 if (e.name === 'QuotaExceededError') {
-                    // Calculate current storage usage
                     let totalSize = 0;
                     for (let key in localStorage) {
                         if (localStorage.hasOwnProperty(key)) {
@@ -2884,7 +2890,6 @@ function updateUserRole(userId, newRole) {
                 return;
             }
             
-            // Show loading message
             const originalText = event.target.textContent;
             event.target.textContent = '⏳ מייצא...';
             event.target.disabled = true;
@@ -2897,32 +2902,26 @@ function updateUserRole(userId, newRole) {
                     format: 'a4'
                 });
                 
-                // Add PDF page with markings
                 const canvas = document.getElementById('pdfCanvas');
                 const drawingCanvas = document.getElementById('drawingCanvas');
                 
-                // Create a temporary canvas to combine both
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = canvas.width;
                 tempCanvas.height = canvas.height;
                 const tempCtx = tempCanvas.getContext('2d');
                 
-                // Draw PDF
                 tempCtx.drawImage(canvas, 0, 0);
-                // Draw markings
                 tempCtx.drawImage(drawingCanvas, 0, 0);
                 
                 const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
-                const imgWidth = 210; // A4 width in mm
+                const imgWidth = 210;
                 const imgHeight = (tempCanvas.height * imgWidth) / tempCanvas.width;
                 
                 pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
                 
-                // Add defects list as HTML (using html2canvas)
                 if (currentInspection.defects && currentInspection.defects.length > 0) {
                     pdf.addPage();
                     
-                    // Create HTML for defects list
                     const defectsHtml = document.createElement('div');
                     defectsHtml.style.width = '800px';
                     defectsHtml.style.padding = '20px';
@@ -2950,7 +2949,6 @@ function updateUserRole(userId, newRole) {
                             <p><strong>תאריך:</strong> ${new Date(currentInspection.date).toLocaleDateString('he-IL')}</p>
                         </div>
                         ${currentInspection.defects.map((defect, index) => {
-                            // Support both old format (single image) and new format (array of images)
                             const images = defect.images || (defect.image ? [defect.image] : []);
                             const imagesHtml = images.length > 0 ? `
                                 <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
@@ -2996,7 +2994,7 @@ function updateUserRole(userId, newRole) {
                         let position = 0;
                         
                         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                        heightLeft -= 297; // A4 height
+                        heightLeft -= 297;
                         
                         while (heightLeft > 0) {
                             position = heightLeft - imgHeight;
@@ -3034,7 +3032,6 @@ function updateUserRole(userId, newRole) {
         function closeModal(modalId) {
             document.getElementById(modalId).classList.remove('active');
             
-            // Reset defect form when closing
             if (modalId === 'addDefectModal') {
                 document.getElementById('addDefectForm').reset();
                 document.getElementById('imagePreviewContainer').style.display = 'none';
@@ -3044,7 +3041,6 @@ function updateUserRole(userId, newRole) {
 
         // Initialize
         function initializeApp() {
-            // Close modals when clicking outside
             document.querySelectorAll('.modal').forEach(modal => {
                 modal.addEventListener('click', function(e) {
                     if (e.target === modal) {
@@ -3053,7 +3049,6 @@ function updateUserRole(userId, newRole) {
                 });
             });
             
-            // Handle window resize for PDF re-rendering
             let resizeTimeout;
             window.addEventListener('resize', function() {
                 clearTimeout(resizeTimeout);
@@ -3066,7 +3061,6 @@ function updateUserRole(userId, newRole) {
             });
         }
 
-        // Initialize default data if needed
         if (!localStorage.getItem('approvedEmails')) {
             localStorage.setItem('approvedEmails', JSON.stringify([]));
         }
