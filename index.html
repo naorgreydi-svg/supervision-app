@@ -25,11 +25,14 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, rgb(200, 230, 255) 0%, #ffffff 100%);
-            min-height: 100vh;
-            direction: rtl;
-        }
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    
+    /* הנה השינוי: צבע אחיד במקום Gradient */
+    background-color: rgb(200, 230, 255); 
+    
+    min-height: 100vh;
+    direction: rtl;
+}
 
         .container {
             max-width: 1400px;
@@ -121,21 +124,25 @@
         }
 
         .btn {
-            width: 100%;
-            padding: 14px;
-            background: C8E6FF;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
+    width: 100%;
+    padding: 14px;
+    
+    /* צבע כחול אחיד וחזק */
+    background-color: #007bff; 
+    
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s;
+}
 
-        .btn:hover {
-            background: #5568d3;
-        }
+/* אפקט כשעוברים עם העכבר */
+.btn:hover {
+    background-color: #0056b3; /* כחול קצת יותר כהה */
+}
 
         .btn-secondary {
             background: #6c757d;
