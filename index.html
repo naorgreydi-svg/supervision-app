@@ -1673,19 +1673,23 @@
         });
 
         // Register Form - Firebase
-        document.getElementById('registerForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const name = document.getElementById('registerName').value;
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            const errorDiv = document.getElementById('registerError');
-            
-            try {
-                errorDiv.classList.remove('show');
-                
-                const usersSnapshot = await db.collection('users').get();
-                const isFirstUser = usersSnapshot.empty;
+         document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const name = document.getElementById('registerName').value;
+    const email = document.getElementById('registerEmail').value;
+    const password = document.getElementById('registerPassword').value;
+    const errorDiv = document.getElementById('registerError');
+    
+    try {
+        errorDiv.classList.remove('show');
+        
+        console.log('🟢 שלב 1: התחלת הרשמה למייל:', email);
+        
+        console.log('🟢 שלב 2: בודק משתמשים קיימים...');
+        const usersSnapshot = await db.collection('users').get();
+        console.log('🟢 שלב 2 הצליח');
+        const isFirstUser = usersSnapshot.empty;
                 
                 let role = 'user';
                 
@@ -1715,12 +1719,17 @@
     }
 }
                 
-                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-                const user = userCredential.user;
-                
-                await user.updateProfile({ displayName: name });
-                
-                await db.collection('users').doc(user.uid).set({
+               console.log('🟢 שלב 3: יוצר משתמש ב-Auth...');
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+        console.log('🟢 שלב 3 הצליח');
+        
+        console.log('🟢 שלב 4: מעדכן שם...');
+        await user.updateProfile({ displayName: name });
+        console.log('🟢 שלב 4 הצליח');
+        
+        console.log('🟢 שלב 5: שומר ב-Firestore users...');
+        await db.collection('users').doc(user.uid).set({
                     name: name,
                     email: email,
                     role: role,
