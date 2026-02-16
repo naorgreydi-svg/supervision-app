@@ -1993,92 +1993,72 @@
 
         // User Management
         function loadUsers() {
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const userList = document.getElementById('userList');
-            
-            userList.innerHTML = '';
-            
-            users.forEach(user => {
-                const div = document.createElement('div');
-                div.className = 'user-item';
-                
-                let roleInfo = '';
-                if (user.role === 'admin') {
-                    roleInfo = '<span class="role-badge admin">מנהל ראשי</span>';
-                } else if (user.role === 'moderator') {
-                    roleInfo = '<span class="role-badge moderator">מנהל משנה</span>';
-                } else {
-                    roleInfo = '<span class="role-badge user">משתמש</span>';
-                }
-                
-                let actionButtons = '';
-                
-                // Main admin can promote/demote users
-                if (currentUser.role === 'admin' && user.id !== currentUser.id) {
-                    if (user.role === 'user') {
-                        actionButtons += `<button class="btn-promote" onclick="promoteToModerator(${user.id})">הפוך למנהל משנה</button>`;
-                        actionButtons += `<button class="btn-promote" onclick="promoteToAdmin(${user.id})" style="background: #dc3545;">הפוך למנהל ראשי</button>`;
-                    } else if (user.role === 'moderator') {
-                        actionButtons += `<button class="btn-demote" onclick="demoteToUser(${user.id})">הורד למשתמש</button>`;
-                        actionButtons += `<button class="btn-promote" onclick="promoteToAdmin(${user.id})" style="background: #dc3545;">הפוך למנהל ראשי</button>`;
-                    } else if (user.role === 'admin' && !user.isFirstAdmin) {
-                        actionButtons += `<button class="btn-demote" onclick="demoteToModerator(${user.id})">הורד למנהל משנה</button>`;
-                        actionButtons += `<button class="btn-demote" onclick="demoteToUser(${user.id})">הורד למשתמש</button>`;
-                    }
-                }
-                
-                // Prevent demoting the last main admin
-                if (user.isFirstAdmin) {
-                    const adminCount = users.filter(u => u.role === 'admin').length;
-                    if (adminCount === 1) {
-                        actionButtons = '<span style="color: #999;">מנהל ראשי אחרון - לא ניתן להוריד</span>';
-                    }
-                }
-                
-                div.innerHTML = `
-                    <div class="user-item-info">
-                        <div>
-                            <strong>${user.name}</strong><br>
-                            <small>${user.email}</small>
-                        </div>
-                        ${roleInfo}
-                    </div>
-                    <div>
-                        ${actionButtons}
-                    </div>
-                `;
-                
-                userList.appendChild(div);
-            });
-        }
+    // 1. שליפת נתונים
+    let users = JSON.parse(localStorage.getItem('users') || '[]');
+    const userList = document.getElementById('userList');
+    const searchTerm = document.getElementById('userSearch') ? document.getElementById('userSearch').value.toLowerCase() : '';
+    
+    userList.innerHTML = '';
+    
+    // 2. מיון לפי דרגות (אדמין -> מנהל משנה -> משתמש)
+    const roleWeight = { 'admin': 3, 'moderator': 2, 'user': 1 };
+    
+    users.sort((a, b) => {
+        return roleWeight[b.role] - roleWeight[a.role];
+    });
 
-        function promoteToModerator(userId) {
-            updateUserRole(userId, 'moderator');
-        }
+    // 3. סינון לפי חיפוש (שם או מייל)
+    const filteredUsers = users.filter(user => 
+        user.name.toLowerCase().includes(searchTerm) || 
+        user.email.toLowerCase().includes(searchTerm)
+    );
 
-        function promoteToAdmin(userId) {
-            if (!confirm('האם להפוך משתמש זה למנהל ראשי?')) return;
-            updateUserRole(userId, 'admin');
-        }
-
-        function demoteToModerator(userId) {
-            updateUserRole(userId, 'moderator');
-        }
-
-        function demoteToUser(userId) {
-            updateUserRole(userId, 'user');
-        }
-
-        function updateUserRole(userId, newRole) {
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const user = users.find(u => u.id === userId);
-            
-            if (user) {
-                user.role = newRole;
-                localStorage.setItem('users', JSON.stringify(users));
-                loadUsers();
+    // 4. הצגה
+    filteredUsers.forEach(user => {
+        const div = document.createElement('div');
+        div.className = 'user-item';
+        
+        let roleInfo = '';
+        if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי</span>';
+        else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה</span>';
+        else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש</span>';
+        
+        // כפתורי פעולה (רק למנהל ראשי, ולא על עצמו)
+        let actionButtons = '';
+        if (currentUser && currentUser.role === 'admin' && user.uid !== currentUser.uid) {
+            if (user.role === 'user') {
+                actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #ffc107; color: black; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'moderator')">הפוך למנהל משנה</button>`;
+            } else if (user.role === 'moderator') {
+                actionButtons += `<button class="btn-add" style="padding: 5px 10px; font-size: 12px; background: #6c757d; margin-left: 5px;" onclick="updateUserRole('${user.uid}', 'user')">הורד למשתמש</button>`;
             }
         }
+        
+        div.innerHTML = `
+            <div class="user-item-info">
+                <div>
+                    <strong>${user.name}</strong><br>
+                    <small>${user.email}</small>
+                </div>
+                ${roleInfo}
+            </div>
+            <div>${actionButtons}</div>
+        `;
+        
+        userList.appendChild(div);
+    });
+}
+
+// פונקציית עזר לעדכון תפקיד (צריך לוודא שהיא קיימת אצלך, אם לא - הוסף גם אותה)
+function updateUserRole(userId, newRole) {
+    const users = JSON.parse(localStorage.getItem('users') || '[]');
+    const userIndex = users.findIndex(u => u.uid === userId);
+    if (userIndex > -1) {
+        users[userIndex].role = newRole;
+        localStorage.setItem('users', JSON.stringify(users));
+        loadUsers(); // רענון הרשימה
+        loadApprovedEmails(); // רענון גם של מסך המיילים כי הדרגה השתנתה
+    }
+}
 
         // Projects Management
         function loadProjects() {
