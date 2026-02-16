@@ -1559,31 +1559,47 @@
         let defectCounter = 0;
         let tempMarking = null;
 
-        // Initialize
-         document.addEventListener('DOMContentLoaded', function() {
-         // Initialize Firebase HERE
-          if (!firebase.apps.length) {
-          firebase.initializeApp(firebaseConfig);
+       // Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // 1. אתחול פיירבייס (אם טרם אותחל)
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
     }
     
+    // 2. הגדרת המשתנים
     auth = firebase.auth();
     db = firebase.firestore();
     storage = firebase.storage();
-    
+
+    // ======================================================
+    // 3. כאן התוספת החשובה: הפעלת מצב אופליין (ללא קליטה)
+    // ======================================================
+    db.enablePersistence()
+        .catch((err) => {
+            if (err.code == 'failed-precondition') {
+                console.log('שגיאה: האפליקציה פתוחה ביותר מדי חלונות במקביל');
+            } else if (err.code == 'unimplemented') {
+                console.log('הדפדפן הנוכחי לא תומך בשמירה ללא אינטרנט');
+            }
+        });
+    // ======================================================
+
     console.log('🔥 Firebase initialized successfully!');
             
-            firebase.auth().onAuthStateChanged(async (user) => {
-                if (user) {
-                    console.log('✅ משתמש זוהה:', user.email);
-                    await loadUserDataFromFirebase(user);
-                    console.log('מתחיל טעינת פרויקטים...');
-                    loadProjects(); 
-                } else {
-                    console.log('❌ לא מחובר');
-                    showLogin();
-                }
-            });
-        });
+    // 4. המאזין להתחברות (נשאר אותו דבר)
+    firebase.auth().onAuthStateChanged(async (user) => {
+        if (user) {
+            console.log('✅ משתמש זוהה:', user.email);
+            await loadUserDataFromFirebase(user);
+            console.log('מתחיל טעינת פרויקטים...');
+            loadProjects(); 
+        } else {
+            console.log('❌ לא מחובר');
+            showLogin();
+        }
+    });
+});
 
         // Load user data from Firestore
         async function loadUserDataFromFirebase(user) {
@@ -2133,30 +2149,57 @@
         }
 
         // Projects Management
-        function loadProjects() {
-            const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-            const projectList = document.getElementById('projectList');
-            
-            projectList.innerHTML = '';
-            
-            projects.forEach(project => {
-                const div = document.createElement('div');
-                div.className = 'project-card';
-                div.onclick = () => openProject(project.id);
-                
-                div.innerHTML = `
-                    <h3>${project.name}</h3>
-                    <p><strong>כתובת:</strong> ${project.address}</p>
-                    <p>${project.description || 'אין תיאור'}</p>
-                `;
-                
-                projectList.appendChild(div);
-            });
-            
-            if (projects.length === 0) {
-                projectList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין פרויקטים עדיין. הוסף פרויקט חדש!</p>';
-            }
+        // --- קוד חדש: טעינת פרויקטים מהענן ---
+async function loadProjects() {
+    const list = document.getElementById('projectList');
+    list.innerHTML = '<div style="text-align:center; margin-top:20px;">טוען נתונים מהענן... ☁️</div>';
+
+    try {
+        // שליפה מהענן לפי סדר ירידה (הכי חדש למעלה)
+        const snapshot = await db.collection('projects')
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        list.innerHTML = ''; // ניקוי
+
+        if (snapshot.empty) {
+            list.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין פרויקטים עדיין. צור את הראשון!</p>';
+            return;
         }
+
+        snapshot.forEach(doc => {
+            const project = doc.data();
+            const projectId = doc.id; // המזהה האמיתי במסד הנתונים
+
+            const div = document.createElement('div');
+            div.className = 'project-card';
+            
+            div.innerHTML = `
+                <h3>${project.name}</h3>
+                <p><strong>כתובת:</strong> ${project.address || '-'}</p>
+                <p>${project.description || ''}</p>
+            `;
+            
+            // לחיצה מעבירה לפרויקט (עם ID מהענן)
+            div.onclick = () => openProject(projectId);
+            
+            list.appendChild(div);
+        });
+
+    } catch (error) {
+        console.error("Error loading projects:", error);
+        
+        // אם השגיאה היא בגלל שחסר "אינדקס" (קורה לפעמים בפיירבייס בהתחלה)
+        // ננסה טעינה פשוטה בלי מיון
+        if (error.code === 'failed-precondition') {
+             console.log("מנסה טעינה ללא מיון...");
+             const snapshot = await db.collection('projects').get();
+             // (כאן אפשר להוסיף לוגיקה פשוטה יותר, אבל לרוב זה לא יקרה)
+        }
+        
+        list.innerHTML = '<p style="color: red; text-align: center;">שגיאה בטעינת נתונים (בדוק קונסול)</p>';
+    }
+}
 
         function filterProjects() {
             const searchTerm = document.getElementById('projectSearch').value.toLowerCase();
@@ -2189,26 +2232,56 @@
             document.getElementById('addProjectModal').classList.add('active');
         }
 
-        document.getElementById('addProjectForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-            
-            const newProject = {
-                id: Date.now(),
-                name: document.getElementById('projectName').value,
-                address: document.getElementById('projectAddress').value,
-                description: document.getElementById('projectDescription').value,
-                inspections: []
-            };
-            
-            projects.push(newProject);
-            localStorage.setItem('projects', JSON.stringify(projects));
-            
-            loadProjects();
-            closeModal('addProjectModal');
-            document.getElementById('addProjectForm').reset();
+        // --- קוד חדש: הוספת פרויקט לענן (Firebase) ---
+document.getElementById('addProjectForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const nameInput = document.getElementById('projectName'); // שים לב: בקוד שלך זה projectName
+    const addressInput = document.getElementById('projectAddress');
+    const descInput = document.getElementById('projectDescription');
+    
+    const name = nameInput.value;
+    const address = addressInput ? addressInput.value : '';
+    const description = descInput ? descInput.value : '';
+
+    if (!name) {
+        alert("נא להזין שם פרויקט");
+        return;
+    }
+
+    // הוספת כפתור טעינה כדי שהמשתמש ידע שמשהו קורה
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn.textContent;
+    submitBtn.textContent = 'שומר... ⏳';
+    submitBtn.disabled = true;
+
+    try {
+        // שליחה לפיירבייס
+        await db.collection('projects').add({
+            name: name,
+            address: address,
+            description: description,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            createdBy: currentUser.uid, 
+            inspections: [] // התחלה עם מערך ריק
         });
+
+        // איפוס הטופס וסגירת המודאל
+        document.getElementById('addProjectModal').classList.remove('active');
+        document.getElementById('addProjectForm').reset();
+        
+        // רענון הרשימה (מהענן)
+        loadProjects();
+
+    } catch (error) {
+        console.error("Error adding project: ", error);
+        alert("שגיאה בשמירה: " + error.message);
+    } finally {
+        // החזרת הכפתור למצב רגיל
+        submitBtn.textContent = originalBtnText;
+        submitBtn.disabled = false;
+    }
+});
 
         function openProject(projectId) {
             const projects = JSON.parse(localStorage.getItem('projects') || '[]');
