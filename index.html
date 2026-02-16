@@ -1691,14 +1691,29 @@
                 
                 if (isFirstUser) {
                     role = 'admin';
-                } else {
-                    const approvedDoc = await db.collection('approvedEmails').doc(email).get();
-                    if (!approvedDoc.exists) {
-                        errorDiv.textContent = '❌ המייל לא מאושר להרשמה. פנה למנהל המערכת.';
-                        errorDiv.classList.add('show');
-                        return;
-                    }
-                }
+                 } else {
+                   // בדיקה ב-Firestore
+                   const approvedDoc = await db.collection('approvedEmails').doc(email).get();
+    
+                  // אם לא נמצא ב-Firestore, בדוק ב-localStorage (תמיכה לאחור)
+                  const localEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
+                  const isApprovedLocally = localEmails.includes(email);
+    
+                  if (!approvedDoc.exists && !isApprovedLocally) {
+                  errorDiv.textContent = '❌ המייל לא מאושר להרשמה. פנה למנהל המערכת.';
+                  errorDiv.classList.add('show');
+                  return;
+    }
+    
+    // אם המייל נמצא ב-localStorage אבל לא ב-Firestore - העבר אותו
+    if (isApprovedLocally && !approvedDoc.exists) {
+        await db.collection('approvedEmails').doc(email).set({
+            addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            addedBy: 'migration',
+            registered: false
+        });
+    }
+}
                 
                 const userCredential = await auth.createUserWithEmailAndPassword(email, password);
                 const user = userCredential.user;
