@@ -2283,23 +2283,43 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
     }
 });
 
-        function openProject(projectId) {
-            const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-            currentProject = projects.find(p => p.id === projectId);
-            
-            if (!currentProject) return;
-            
-            document.getElementById('projectDetailsTitle').textContent = currentProject.name;
-            document.getElementById('projectDetailsAddress').textContent = '📍 ' + currentProject.address;
-            document.getElementById('projectDetailsDescription').textContent = currentProject.description || '';
-            
-            loadInspections();
-            
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById('projectDetailsTab').classList.add('active');
+        async function openProject(projectId) {
+    console.log("מנסה לפתוח פרויקט עם מזהה:", projectId);
+
+    try {
+        // מציג הודעת טעינה זמנית בכותרת
+        document.getElementById('projectDetailsTitle').textContent = "טוען נתונים... ⏳";
+
+        // שליפת הפרויקט מהענן (Firebase)
+        const doc = await db.collection('projects').doc(projectId).get();
+
+        if (!doc.exists) {
+            alert("❌ שגיאה: הפרויקט לא נמצא במערכת");
+            return;
         }
+
+        // עדכון המשתנה הגלובלי עם הנתונים האמיתיים
+        currentProject = { id: doc.id, ...doc.data() };
+
+        // עדכון המסך עם פרטי הפרויקט
+        document.getElementById('projectDetailsTitle').textContent = currentProject.name;
+        document.getElementById('projectDetailsAddress').textContent = '📍 ' + (currentProject.address || '-');
+        document.getElementById('projectDetailsDescription').textContent = currentProject.description || '';
+
+        // החלפת הטאבים (הסתרת הרשימה והצגת הפרטים)
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById('projectDetailsTab').classList.add('active');
+
+        // טעינת הפיקוחים של הפרויקט הזה
+        loadInspections();
+
+    } catch (error) {
+        console.error("Error opening project:", error);
+        alert("שגיאה בטעינת הפרויקט: " + error.message);
+    }
+}
 
         function backToProjects() {
             currentProject = null;
