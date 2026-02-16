@@ -1719,7 +1719,7 @@
                 await db.collection('approvedEmails').doc(email).update({
                     registered: true,
                     registeredAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true });
                 
             } catch (error) {
                 console.error('Registration error:', error);
