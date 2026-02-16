@@ -2155,12 +2155,11 @@ async function loadProjects() {
     list.innerHTML = '<div style="text-align:center; margin-top:20px;">טוען נתונים מהענן... ☁️</div>';
 
     try {
-        // שליפה מהענן לפי סדר ירידה (הכי חדש למעלה)
         const snapshot = await db.collection('projects')
             .orderBy('createdAt', 'desc')
             .get();
 
-        list.innerHTML = ''; // ניקוי
+        list.innerHTML = '';
 
         if (snapshot.empty) {
             list.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין פרויקטים עדיין. צור את הראשון!</p>';
@@ -2169,18 +2168,25 @@ async function loadProjects() {
 
         snapshot.forEach(doc => {
             const project = doc.data();
-            const projectId = doc.id; // המזהה האמיתי במסד הנתונים
+            const projectId = doc.id;
 
             const div = document.createElement('div');
             div.className = 'project-card';
             
+            // הגדרת עיצוב יחסי כדי למקם את כפתור המחיקה
+            div.style.position = 'relative';
+
             div.innerHTML = `
+                <button onclick="deleteProject(event, '${projectId}')" 
+                        style="position: absolute; top: 10px; left: 10px; background: #dc3545; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-weight: bold;">
+                    🗑️
+                </button>
                 <h3>${project.name}</h3>
                 <p><strong>כתובת:</strong> ${project.address || '-'}</p>
                 <p>${project.description || ''}</p>
             `;
             
-            // לחיצה מעבירה לפרויקט (עם ID מהענן)
+            // לחיצה על הכרטיס פותחת את הפרויקט
             div.onclick = () => openProject(projectId);
             
             list.appendChild(div);
@@ -2188,16 +2194,25 @@ async function loadProjects() {
 
     } catch (error) {
         console.error("Error loading projects:", error);
-        
-        // אם השגיאה היא בגלל שחסר "אינדקס" (קורה לפעמים בפיירבייס בהתחלה)
-        // ננסה טעינה פשוטה בלי מיון
-        if (error.code === 'failed-precondition') {
-             console.log("מנסה טעינה ללא מיון...");
-             const snapshot = await db.collection('projects').get();
-             // (כאן אפשר להוסיף לוגיקה פשוטה יותר, אבל לרוב זה לא יקרה)
-        }
-        
-        list.innerHTML = '<p style="color: red; text-align: center;">שגיאה בטעינת נתונים (בדוק קונסול)</p>';
+        list.innerHTML = '<p style="color: red; text-align: center;">שגיאה בטעינת נתונים</p>';
+    }
+
+}
+async function deleteProject(event, projectId) {
+    // מונע מהלחיצה על המחיקה לפתוח גם את הפרויקט
+    event.stopPropagation(); 
+
+    if (!confirm("⚠️ האם אתה בטוח שברצונך למחוק את הפרויקט?\nפעולה זו אינה הפיכה!")) {
+        return;
+    }
+
+    try {
+        await db.collection('projects').doc(projectId).delete();
+        alert("✅ הפרויקט נמחק בהצלחה");
+        loadProjects(); // רענון הרשימה
+    } catch (error) {
+        console.error("Error deleting project:", error);
+        alert("שגיאה במחיקה: " + error.message);
     }
 }
 
@@ -2332,58 +2347,52 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
         // Inspections Management
        // --- קוד חדש: טעינת פיקוחים מהענן ---
        async function loadInspections() {
-          const list = document.getElementById('inspectionList');
-          const searchTerm = document.getElementById('inspectionSearch') ? document.getElementById('inspectionSearch').value.toLowerCase() : '';
-    
-      // אם אין פרויקט פעיל, אי אפשר לטעון
-          if (!currentProject || !currentProject.id) return;
+    const list = document.getElementById('inspectionList');
+    const searchTerm = document.getElementById('inspectionSearch') ? document.getElementById('inspectionSearch').value.toLowerCase() : '';
 
-          list.innerHTML = '<div style="text-align:center; padding:10px;">טוען פיקוחים... ⏳</div>';
+    if (!currentProject || !currentProject.id) return;
+
+    list.innerHTML = '<div style="text-align:center; padding:10px;">טוען פיקוחים... ⏳</div>';
 
     try {
-        // שליפה מתת-התיקייה בענן
         const snapshot = await db.collection('projects')
             .doc(currentProject.id)
             .collection('inspections')
-            .orderBy('date', 'desc') // מהחדש לישן לפי תאריך הפיקוח
+            .orderBy('date', 'desc')
             .get();
 
-        list.innerHTML = ''; // ניקוי
+        list.innerHTML = '';
 
         if (snapshot.empty) {
             list.innerHTML = '<p style="text-align: center; color: #666;">אין פיקוחים בפרויקט זה.</p>';
             return;
         }
 
-        // המרה לרשימה וסינון לפי חיפוש
         const inspections = [];
         snapshot.forEach(doc => {
             const data = doc.data();
-            data.id = doc.id; // שמירת המזהה לשימוש עתידי
+            data.id = doc.id;
             inspections.push(data);
         });
 
-        // סינון (החיפוש עובד על מה שירד מהענן)
         const filtered = inspections.filter(insp => {
             const dateStr = new Date(insp.date).toLocaleDateString('he-IL');
             const name = insp.name.toLowerCase();
-            const notes = (insp.notes || '').toLowerCase();
-            return name.includes(searchTerm) || notes.includes(searchTerm) || dateStr.includes(searchTerm);
+            return name.includes(searchTerm) || dateStr.includes(searchTerm);
         });
 
         if (filtered.length === 0) {
-            list.innerHTML = '<p style="text-align: center;">לא נמצאו תוצאות בחיפוש</p>';
+            list.innerHTML = '<p style="text-align: center;">לא נמצאו תוצאות</p>';
             return;
         }
 
-        // ציור הרשימה
         filtered.forEach(insp => {
             const div = document.createElement('div');
             div.className = 'inspection-item';
             div.style.cursor = 'pointer';
             
-            // לחיצה תפתח את הפיקוח (נצטרך לעדכן את openInspection בהמשך לליקויים)
-            div.onclick = () => openInspection(insp);
+            // הגדרת לחיצה על השורה כולה לפתיחת הפיקוח
+            div.onclick = () => openInspection(insp.id);
 
             const date = new Date(insp.date).toLocaleDateString('he-IL');
             
@@ -2391,9 +2400,16 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
                 <div style="flex: 1;">
                     <h4 style="margin: 0; color: #333;">${insp.name}</h4>
                     <div style="color: #666; font-size: 14px; margin-top: 5px;">📅 ${date}</div>
-                    ${insp.notes ? `<div style="color: #888; font-size: 13px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">${insp.notes}</div>` : ''}
+                    ${insp.notes ? `<div style="color: #888; font-size: 13px;">${insp.notes}</div>` : ''}
                 </div>
-                <div style="font-size: 20px; color: #007bff;">›</div>
+                
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button onclick="deleteInspection(event, '${insp.id}')" 
+                            style="background: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer;">
+                        מחק 🗑️
+                    </button>
+                    <div style="font-size: 20px; color: #007bff;">›</div>
+                </div>
             `;
             
             list.appendChild(div);
@@ -2404,7 +2420,27 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
         list.innerHTML = '<p style="color: red;">שגיאה בטעינת פיקוחים</p>';
     }
 }
+async function deleteInspection(event, inspectionId) {
+    event.stopPropagation(); // חשוב: מונע כניסה לפיקוח כשלוחצים מחיקה
 
+    if (!confirm("⚠️ למחוק את הפיקוח הזה?\nכל הנתונים והליקויים שבו ימחקו.")) {
+        return;
+    }
+
+    try {
+        await db.collection('projects')
+            .doc(currentProject.id)
+            .collection('inspections')
+            .doc(inspectionId)
+            .delete();
+            
+        alert("✅ הפיקוח נמחק");
+        loadInspections(); // רענון הרשימה
+    } catch (error) {
+        console.error("Error deleting inspection:", error);
+        alert("שגיאה במחיקה: " + error.message);
+    }
+}
 
         function openAddInspectionModal() {
             document.getElementById('addInspectionModal').classList.add('active');
