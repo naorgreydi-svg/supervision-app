@@ -1169,7 +1169,42 @@
                 width: 100%;
                 margin-top: 20px;
             }
-        }
+        /* --- תיקון כפתורים וטאבים לרקע תכלת --- */
+
+/* 1. תיקון הטאבים (פרויקטים/מיילים/משתמשים) */
+.nav-tab {
+    background-color: white !important; /* רקע לבן בוהק */
+    color: #333 !important; /* טקסט כהה */
+    border: 1px solid #ccc !important; /* מסגרת אפורה עדינה */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); /* צל עדין להבלטה */
+    margin-right: 5px; /* רווח בין כפתורים */
+}
+
+/* כשהטאב פעיל - הוא יהיה כחול */
+.nav-tab.active {
+    background-color: #007bff !important;
+    color: white !important;
+    border-color: #007bff !important;
+}
+
+/* 2. תיקון כפתורים משניים (כמו "חזור", "ביטול" או כפתורים אפורים) */
+.btn-secondary, .back-button, button[style*="background: gray"] {
+    background-color: white !important;
+    color: #333 !important;
+    border: 2px solid #6c757d !important; /* מסגרת אפורה ברורה */
+    font-weight: bold;
+}
+
+/* הבלטה במעבר עכבר לכפתורים אפורים */
+.btn-secondary:hover, .back-button:hover {
+    background-color: #e2e6ea !important;
+}
+
+/* 3. חיזוק כפתורי פעולה רגילים */
+.btn, .btn-add {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* צל שנותן תחושת עומק */
+    border: 1px solid rgba(0,0,0,0.1);
+}
     </style>
 </head>
 <body>
