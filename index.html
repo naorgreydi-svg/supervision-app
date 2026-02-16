@@ -2898,51 +2898,80 @@ async function deleteInspection(event, inspectionId) {
             openAddDefectModal();
         }
 
-        document.getElementById('addDefectForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        document.getElementById('addDefectForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const description = document.getElementById('defectDescription').value;
+    const severity = document.getElementById('defectSeverity').value;
+    const imageFiles = document.getElementById('defectImages').files;
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+
+    // נעילת כפתור ושינוי טקסט
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = 'מעלה תמונות ושומר... ⏳';
+    submitBtn.disabled = true;
+
+    try {
+        const imageUrls = [];
+
+        // אם יש תמונות - נעלה אותן אחת אחת ל-Storage
+        if (imageFiles.length > 0) {
+            // נתיב מסודר: פרויקטים -> ID -> פיקוחים -> תמונות
+            const storagePath = `projects/${currentProject.id}/inspections/${currentInspection.id}/defects`;
             
-            const description = document.getElementById('defectDescription').value;
-            const severity = document.getElementById('defectSeverity').value;
-            const imageFiles = document.getElementById('defectImages').files;
-            
-            const defect = {
-                id: Date.now(),
-                number: tempMarking ? tempMarking.number : defectCounter,
-                description: description,
-                severity: severity,
-                marking: tempMarking,
-                images: []
-            };
-            
-            if (imageFiles.length > 0) {
-                let processedCount = 0;
-                Array.from(imageFiles).forEach(file => {
-                    if (file.size > 500 * 1024) {
-                        compressImage(file, function(compressedDataUrl) {
-                            defect.images.push(compressedDataUrl);
-                            processedCount++;
-                            
-                            if (processedCount === imageFiles.length) {
-                                saveDefect(defect);
-                            }
-                        });
-                    } else {
-                        const reader = new FileReader();
-                        reader.onload = function(e) {
-                            defect.images.push(e.target.result);
-                            processedCount++;
-                            
-                            if (processedCount === imageFiles.length) {
-                                saveDefect(defect);
-                            }
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                });
-            } else {
-                saveDefect(defect);
+            for (const file of imageFiles) {
+                // קריאה לפונקציה שיצרנו בשלב 2
+                const url = await uploadFileToStorage(file, storagePath);
+                imageUrls.push(url);
             }
-        });
+        }
+
+        // הכנת אובייקט הליקוי
+        const defect = {
+            id: Date.now(), // מזהה ייחודי לליקוי
+            number: tempMarking ? tempMarking.number : defectCounter,
+            description: description,
+            severity: severity,
+            marking: tempMarking, // המיקום על השרטוט
+            images: imageUrls // שומרים רק את הקישורים!
+        };
+
+        // הוספה למערך הליקויים המקומי (כדי שנראה מיד במסך)
+        if (!currentInspection.defects) {
+            currentInspection.defects = [];
+        }
+        currentInspection.defects.push(defect);
+        currentInspection.defects.sort((a, b) => a.number - b.number);
+
+        // עדכון המסמך ב-Firestore (עדכון מערך הליקויים בתוך הפיקוח)
+        // שים לב: אנחנו צריכים לעדכן את כל מערך הליקויים מחדש
+        await db.collection('projects')
+            .doc(currentProject.id)
+            .collection('inspections')
+            .doc(currentInspection.id)
+            .update({
+                defects: currentInspection.defects
+            });
+
+        // רענון התצוגה
+        loadDefects();
+        redrawMarkings();
+        
+        // איפוס וסגירה
+        closeModal('addDefectModal');
+        document.getElementById('addDefectForm').reset();
+        tempMarking = null;
+        alert("✅ הליקוי והתמונות נשמרו בהצלחה!");
+
+    } catch (error) {
+        console.error("Error saving defect:", error);
+        alert("❌ שגיאה בשמירה: " + error.message);
+    } finally {
+        // שחרור הכפתור
+        submitBtn.textContent = originalText;
+        submitBtn.disabled = false;
+    }
+});
 
         function compressImage(file, callback) {
             const reader = new FileReader();
@@ -3296,6 +3325,28 @@ async function deleteInspection(event, inspectionId) {
         if (!localStorage.getItem('projects')) {
             localStorage.setItem('projects', JSON.stringify([]));
         }
-    </script>
-</body>
+    <async function uploadFileToStorage(file, folderPath) {
+            try {
+                // יצירת שם ייחודי לקובץ (זמן + שם מקורי)
+                const fileName = `${Date.now()}_${file.name}`;
+                const fullPath = `${folderPath}/${fileName}`;
+                
+                // יצירת הפניה למיקום בשרת
+                const storageRef = storage.ref().child(fullPath);
+                
+                // העלאת הקובץ
+                const snapshot = await storageRef.put(file);
+                
+                // קבלת הקישור להורדה (URL)
+                const downloadURL = await snapshot.ref.getDownloadURL();
+                return downloadURL;
+                
+            } catch (error) {
+                console.error("Upload failed:", error);
+                throw new Error("כישלון בהעלאת קובץ: " + file.name);
+            }
+        }
+        // ==========================================
+
+    </script> </body>
 </html>
