@@ -2150,24 +2150,55 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Projects Management
         // --- קוד חדש: טעינת פרויקטים מהענן ---
-function openProject(projectData, projectId) {
-    console.log("Opening project:", projectData.name);
-    
-    // שמירה בזיכרון הנוכחי
-    currentProject = { id: projectId, ...projectData };
-    
-    // מעבר מסך מיידי
-    showTab('projectDetails');
-    
-    // עדכון הכותרות
-    const titleEl = document.getElementById('projectTitle'); // וודא שזה ה-ID אצלך ב-HTML
-    const detailsTitleEl = document.getElementById('projectDetailsTitle'); // למקרה שיש כפילות בשמות
-    
-    if (titleEl) titleEl.innerText = currentProject.name;
-    if (detailsTitleEl) detailsTitleEl.innerText = currentProject.name;
+async function loadProjects() {
+    const list = document.getElementById('projectList');
+    list.innerHTML = '<div style="text-align:center; margin-top:20px;">טוען נתונים מהענן... ☁️</div>';
 
-    // טעינת הפיקוחים (זה הדבר היחיד שצריך לטעון עכשיו)
-    loadInspections(); 
+    try {
+        // שליפה מהענן לפי סדר ירידה (הכי חדש למעלה)
+        const snapshot = await db.collection('projects')
+            .orderBy('createdAt', 'desc')
+            .get();
+
+        list.innerHTML = ''; // ניקוי
+
+        if (snapshot.empty) {
+            list.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין פרויקטים עדיין. צור את הראשון!</p>';
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            const project = doc.data();
+            const projectId = doc.id; // המזהה האמיתי במסד הנתונים
+
+            const div = document.createElement('div');
+            div.className = 'project-card';
+            
+            div.innerHTML = `
+                <h3>${project.name}</h3>
+                <p><strong>כתובת:</strong> ${project.address || '-'}</p>
+                <p>${project.description || ''}</p>
+            `;
+            
+            // לחיצה מעבירה לפרויקט (עם ID מהענן)
+            div.onclick = () => openProject(projectId);
+            
+            list.appendChild(div);
+        });
+
+    } catch (error) {
+        console.error("Error loading projects:", error);
+        
+        // אם השגיאה היא בגלל שחסר "אינדקס" (קורה לפעמים בפיירבייס בהתחלה)
+        // ננסה טעינה פשוטה בלי מיון
+        if (error.code === 'failed-precondition') {
+             console.log("מנסה טעינה ללא מיון...");
+             const snapshot = await db.collection('projects').get();
+             // (כאן אפשר להוסיף לוגיקה פשוטה יותר, אבל לרוב זה לא יקרה)
+        }
+        
+        list.innerHTML = '<p style="color: red; text-align: center;">שגיאה בטעינת נתונים (בדוק קונסול)</p>';
+    }
 }
 
         function filterProjects() {
@@ -2352,6 +2383,7 @@ document.getElementById('addProjectForm').addEventListener('submit', async funct
         console.error("Error loading inspections:", error);
         list.innerHTML = '<p style="color: red;">שגיאה בטעינת פיקוחים</p>';
     }
+}
 }
 
         function openAddInspectionModal() {
