@@ -1543,12 +1543,8 @@
         };
 
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const storage = firebase.storage();
-
-        console.log('🔥 Firebase initialized successfully!');
+        // Firebase will be initialized after page loads - see DOMContentLoaded below
+        let auth, db, storage;
 
         // Global State
         let currentUser = null;
@@ -1564,10 +1560,17 @@
         let tempMarking = null;
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
+         document.addEventListener('DOMContentLoaded', function() {
+         // Initialize Firebase HERE
+          if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+    }
+    
+    auth = firebase.auth();
+    db = firebase.firestore();
+    storage = firebase.storage();
+    
+    console.log('🔥 Firebase initialized successfully!');
             
             firebase.auth().onAuthStateChanged(async (user) => {
                 if (user) {
