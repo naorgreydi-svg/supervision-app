@@ -1315,6 +1315,8 @@
                     <h2>ניהול מיילים מאושרים</h2>
                     <p class="info-text">רק מיילים שנמצאים ברשימה יכולים להירשם למערכת</p>
                     
+					<input type="text" class="search-box" id="emailSearch" placeholder="🔍 חיפוש מייל..." oninput="loadApprovedEmails()" style="margin-bottom: 15px;">
+					
                     <div style="margin: 20px 0;">
                         <button class="btn-add" onclick="openAddEmailModal()">+ הוסף מייל בודד</button>
                         <button class="btn-add" onclick="openBulkEmailModal()" style="background: #17a2b8; margin-right: 10px;">+ הוסף מיילים מרובים</button>
@@ -1327,7 +1329,8 @@
                 <div id="usersTab" class="tab-content">
                     <h2>ניהול משתמשים</h2>
                     <p class="info-text">ניהול הרשאות משתמשים במערכת</p>
-                    <div id="userList" class="user-list"></div>
+                    <input type="text" class="search-box" id="userSearch" placeholder="🔍 חיפוש משתמש..." oninput="loadUsers()" style="margin-bottom: 15px;">
+					<div id="userList" class="user-list"></div>
                 </div>
 
                 <!-- Project Details Tab -->
@@ -1831,66 +1834,65 @@
 
         // Email Management
         function loadApprovedEmails() {
-            const approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
-            const users = JSON.parse(localStorage.getItem('users') || '[]');
-            const emailList = document.getElementById('emailList');
+    // 1. שליפת נתונים
+    let approvedEmails = JSON.parse(localStorage.getItem('approvedEmails') || '[]');
+    const users = JSON.parse(localStorage.getItem('users') || '[]');
+    const searchTerm = document.getElementById('emailSearch') ? document.getElementById('emailSearch').value.toLowerCase() : '';
+    const emailList = document.getElementById('emailList');
+    
+    emailList.innerHTML = '';
+    
+    if (approvedEmails.length === 0) {
+        emailList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין מיילים מאושרים עדיין.</p>';
+        return;
+    }
+
+    // 2. מיון: מיילים שלא נרשמו (pending) יהיו למעלה
+    approvedEmails.sort((a, b) => {
+        const userA = users.find(u => u.email === a);
+        const userB = users.find(u => u.email === b);
+        // אם A לא רשום ו-B כן רשום -> A בא קודם (-1)
+        if (!userA && userB) return -1;
+        if (userA && !userB) return 1;
+        return 0; // אחרת לא משנים סדר
+    });
+
+    // 3. סינון לפי חיפוש
+    const filteredEmails = approvedEmails.filter(email => email.toLowerCase().includes(searchTerm));
+
+    // 4. הצגה על המסך
+    filteredEmails.forEach(email => {
+        const user = users.find(u => u.email === email);
+        const div = document.createElement('div');
+        div.className = 'email-item';
+        
+        let roleInfo = '';
+        let canDelete = true; // ברירת מחדל
+        
+        if (user) {
+            // המשתמש כבר נרשם
+            if (user.role === 'admin') roleInfo = '<span class="user-badge admin">מנהל ראשי ✓</span>';
+            else if (user.role === 'moderator') roleInfo = '<span class="user-badge" style="background: #ffc107; color: black;">מנהל משנה ✓</span>';
+            else roleInfo = '<span class="user-badge" style="background: #28a745;">משתמש ✓</span>';
             
-            emailList.innerHTML = '';
-            
-            if (approvedEmails.length === 0) {
-                emailList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">אין מיילים מאושרים עדיין. הוסף מיילים כדי לאפשר הרשמות!</p>';
-                return;
-            }
-            
-            approvedEmails.forEach(email => {
-                const user = users.find(u => u.email === email);
-                const div = document.createElement('div');
-                div.className = 'email-item';
-                
-                let roleInfo = '';
-                let deleteButton = '';
-                let canDelete = false;
-                
-                if (user) {
-                    if (user.role === 'admin') {
-                        roleInfo = '<span class="role-badge admin">מנהל ראשי ✓ נרשם</span>';
-                        // Only admin can delete other admin emails
-                        if (currentUser.role === 'admin' && user.id !== currentUser.id) {
-                            canDelete = true;
-                        }
-                    } else if (user.role === 'moderator') {
-                        roleInfo = '<span class="role-badge moderator">מנהל משנה ✓ נרשם</span>';
-                        // Admin can delete moderator emails
-                        if (currentUser.role === 'admin') {
-                            canDelete = true;
-                        }
-                    } else {
-                        roleInfo = '<span class="role-badge user">משתמש ✓ נרשם</span>';
-                        // Both admin and moderator can delete regular user emails
-                        if (currentUser.role === 'moderator' || currentUser.role === 'admin') {
-                            canDelete = true;
-                        }
-                    }
-                } else {
-                    roleInfo = '<span class="role-badge" style="background: #6c757d; color: white;">⏳ ממתין להרשמה</span>';
-                    canDelete = true; // Can always delete emails that haven't registered
-                }
-                
-                if (canDelete) {
-                    deleteButton = `<button class="btn-delete" onclick="deleteEmail('${email}')">מחק</button>`;
-                }
-                
-                div.innerHTML = `
-                    <div>
-                        <span class="email" style="font-size: 16px;">${email}</span>
-                        ${roleInfo}
-                    </div>
-                    ${deleteButton}
-                `;
-                
-                emailList.appendChild(div);
-            });
+            // אי אפשר למחוק אדמינים (אלא אם אתה אדמין אחר)
+            if (user.role === 'admin' && currentUser.email !== user.email) canDelete = false; 
+        } else {
+            // טרם נרשם (יופיע למעלה)
+            roleInfo = '<span class="user-badge" style="background: #6c757d;">⏳ ממתין להרשמה</span>';
         }
+        
+        div.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <span class="email" style="font-size: 16px; font-weight: bold;">${email}</span>
+                <div>${roleInfo}</div>
+            </div>
+            ${canDelete ? `<button class="btn-delete" onclick="deleteEmail('${email}')">מחק</button>` : ''}
+        `;
+        
+        emailList.appendChild(div);
+    });
+}
 
         function openAddEmailModal() {
             document.getElementById('addEmailModal').classList.add('active');
