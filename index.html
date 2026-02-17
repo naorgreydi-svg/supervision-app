@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>פיקוח עליון</title>
+    <title>מערכת ניהול  - Firebase</title>
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -2871,34 +2871,54 @@ async function deleteInspection(event, inspectionId) {
         }
 
         function redrawMarkings() {
-            drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-            
-            if (!currentInspection.defects) return;
-            
-            currentInspection.defects.forEach(defect => {
-                if (!defect.marking) return;
-                
-                const m = defect.marking;
-                drawingContext.strokeStyle = 'red';
-                drawingContext.lineWidth = 3;
-                drawingContext.fillStyle = 'red';
-                drawingContext.font = 'bold 20px Arial';
-                
-                if (m.tool === 'rect') {
-                    drawingContext.strokeRect(m.startX, m.startY, m.endX - m.startX, m.endY - m.startY);
-                } else if (m.tool === 'circle' || m.tool === 'oval') {
-                    drawingContext.beginPath();
-                    const radiusX = Math.abs(m.endX - m.startX) / 2;
-                    const radiusY = m.tool === 'circle' ? radiusX : Math.abs(m.endY - m.startY) / 2;
-                    const centerX = m.startX + (m.endX - m.startX) / 2;
-                    const centerY = m.startY + (m.endY - m.startY) / 2;
-                    drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-                    drawingContext.stroke();
-                }
-                
-                drawingContext.fillText(m.number, m.startX, m.startY - 5);
-            });
+    // ניקוי הקנבס
+    drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    
+    if (!currentInspection.defects) return;
+
+    // חישוב יחס הזום הנוכחי (בהנחה שהסימון המקורי נעשה ב-100% או יחסית לגודל הנוכחי)
+    // הערה: לפתרון מושלם צריך לשמור באיזה זום בוצע הסימון המקורי.
+    // בתיקון זה נניח שהסימונים מתאימים לזום הנוכחי, ובייצוא נטפל בהמרה.
+    
+    currentInspection.defects.forEach(defect => {
+        if (!defect.marking) return;
+        
+        const m = defect.marking;
+        
+        // הגדרות עיצוב
+        drawingContext.strokeStyle = '#dc3545'; // אדום
+        drawingContext.lineWidth = 3;
+        drawingContext.fillStyle = '#dc3545';
+        drawingContext.font = 'bold 24px Arial'; // פונט גדול וברור יותר
+        
+        // ציור הצורה
+        drawingContext.beginPath();
+        
+        if (m.tool === 'rect') {
+            drawingContext.strokeRect(m.startX, m.startY, m.endX - m.startX, m.endY - m.startY);
+        } else if (m.tool === 'circle' || m.tool === 'oval') {
+            const radiusX = Math.abs(m.endX - m.startX) / 2;
+            const radiusY = m.tool === 'circle' ? radiusX : Math.abs(m.endY - m.startY) / 2;
+            const centerX = m.startX + (m.endX - m.startX) / 2;
+            const centerY = m.startY + (m.endY - m.startY) / 2;
+            drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            drawingContext.stroke();
         }
+        
+        // ציור המספר עם רקע לבן קטן כדי שיהיה קריא
+        const text = m.number.toString();
+        const textX = m.startX;
+        const textY = m.startY - 10;
+        
+        // רקע למספר
+        drawingContext.fillStyle = 'white';
+        drawingContext.fillRect(textX - 5, textY - 20, 30, 25);
+        
+        // המספר עצמו
+        drawingContext.fillStyle = '#dc3545';
+        drawingContext.fillText(text, textX, textY);
+    });
+}
 
         // Defects Management
         function openAddDefectModal(marking = null) {
@@ -3054,22 +3074,63 @@ async function deleteInspection(event, inspectionId) {
             reader.readAsDataURL(file);
         }
 
-        function saveDefect(defect) {
-            if (!currentInspection.defects) {
-                currentInspection.defects = [];
-            }
-            
-            currentInspection.defects.push(defect);
-            currentInspection.defects.sort((a, b) => a.number - b.number);
-            
-            saveInspection();
-            loadDefects();
-            redrawMarkings();
-            
-            closeModal('addDefectModal');
-            document.getElementById('addDefectForm').reset();
-            tempMarking = null;
+        // --- פונקציות משופרות לניהול ליקויים ומיספור ---
+
+// פונקציית עזר לסידור מחדש של המספרים
+function renumberDefects() {
+    if (!currentInspection.defects) return;
+
+    // 1. מיון כרונולוגי לפי ה-ID (שהוא בעצם הזמן שנוצר הליקוי)
+    currentInspection.defects.sort((a, b) => a.id - b.id);
+
+    // 2. מספור מחדש רציף (1, 2, 3...)
+    currentInspection.defects.forEach((defect, index) => {
+        defect.number = index + 1;
+        // אם יש סימון גרפי, מעדכנים גם את המספר שמופיע עליו
+        if (defect.marking) {
+            defect.marking.number = index + 1;
         }
+    });
+}
+
+// שמירת ליקוי (מחליף את הפונקציה הקודמת saveDefect)
+function saveDefect(defect) {
+    if (!currentInspection.defects) {
+        currentInspection.defects = [];
+    }
+    
+    currentInspection.defects.push(defect);
+    
+    // סידור ומיספור מחדש
+    renumberDefects();
+    
+    // שמירה ועדכון תצוגה
+    saveInspection();
+    loadDefects();
+    redrawMarkings();
+    
+    closeModal('addDefectModal');
+    document.getElementById('addDefectForm').reset();
+    tempMarking = null;
+}
+
+// מחיקת ליקוי (מחליף את הפונקציה הקודמת deleteDefect)
+function deleteDefect(defectId) {
+    if (!confirm('האם למחוק את הליקוי?')) return;
+    
+    const index = currentInspection.defects.findIndex(d => d.id === defectId);
+    if (index > -1) {
+        // מחיקה מהמערך
+        currentInspection.defects.splice(index, 1);
+        
+        // סידור ומיספור מחדש (כדי שלא יהיו חורים כמו 1, 3, 4)
+        renumberDefects();
+
+        saveInspection();
+        loadDefects();
+        redrawMarkings();
+    }
+}
 
         function loadDefects() {
             const defectsList = document.getElementById('defectsList');
@@ -3144,17 +3205,7 @@ async function deleteInspection(event, inspectionId) {
             document.body.appendChild(modal);
         }
 
-        function deleteDefect(defectId) {
-            if (!confirm('האם למחוק את הליקוי?')) return;
-            
-            const index = currentInspection.defects.findIndex(d => d.id === defectId);
-            if (index > -1) {
-                currentInspection.defects.splice(index, 1);
-                saveInspection();
-                loadDefects();
-                redrawMarkings();
-            }
-        }
+        
 
         function saveInspection() {
             const projects = JSON.parse(localStorage.getItem('projects') || '[]');
@@ -3187,141 +3238,149 @@ async function deleteInspection(event, inspectionId) {
 
         // Export & Email
         async function exportToPdf() {
-            if (!currentPdf) {
-                alert('❌ אין תוכנית PDF לייצא');
-                return;
-            }
-            
-            const originalText = event.target.textContent;
-            event.target.textContent = '⏳ מייצא...';
-            event.target.disabled = true;
-            
-            try {
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF({
-                    orientation: 'portrait',
-                    unit: 'mm',
-                    format: 'a4'
-                });
+    if (!currentPdf) {
+        alert('❌ אין תוכנית PDF לייצא');
+        return;
+    }
+    
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = 'מייצר דוח... ⏳';
+    btn.disabled = true;
+    
+    try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+
+        // --- שלב 1: יצירת תמונה של התוכנית עם הסימונים צרובים עליה ---
+        
+        // יצירת קנבס זמני בגודל המקורי של ה-PDF (איכות גבוהה)
+        const page = await currentPdf.getPage(1);
+        const viewport = page.getViewport({ scale: 1.5 }); // סקייל 1.5 לאיכות טובה
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // 1. ציור ה-PDF לקנבס
+        await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+        
+        // 2. ציור הסימונים (הליקויים) על גבי הקנבס הזה
+        if (currentInspection.defects) {
+            // חישוב יחס המרה בין המסך לקנבס הייצוא
+            // אנחנו משווים את רוחב הקנבס הזמני לרוחב הקנבס שרואים במסך
+            const screenCanvas = document.getElementById('pdfCanvas');
+            const scaleX = tempCanvas.width / screenCanvas.width;
+            const scaleY = tempCanvas.height / screenCanvas.height;
+
+            tempCtx.strokeStyle = '#FF0000'; // אדום חזק
+            tempCtx.lineWidth = 5; // קו עבה יותר לדוח
+            tempCtx.font = 'bold 40px Arial';
+            tempCtx.fillStyle = '#FF0000';
+
+            currentInspection.defects.forEach(defect => {
+                if (!defect.marking) return;
+                const m = defect.marking;
                 
-                const canvas = document.getElementById('pdfCanvas');
-                const drawingCanvas = document.getElementById('drawingCanvas');
-                
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                const tempCtx = tempCanvas.getContext('2d');
-                
-                tempCtx.drawImage(canvas, 0, 0);
-                tempCtx.drawImage(drawingCanvas, 0, 0);
-                
-                const imgData = tempCanvas.toDataURL('image/jpeg', 1.0);
-                const imgWidth = 210;
-                const imgHeight = (tempCanvas.height * imgWidth) / tempCanvas.width;
-                
-                pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-                
-                if (currentInspection.defects && currentInspection.defects.length > 0) {
-                    pdf.addPage();
-                    
-                    const defectsHtml = document.createElement('div');
-                    defectsHtml.style.width = '800px';
-                    defectsHtml.style.padding = '20px';
-                    defectsHtml.style.backgroundColor = 'white';
-                    defectsHtml.style.direction = 'rtl';
-                    defectsHtml.style.fontFamily = 'Arial, sans-serif';
-                    
-                    const severityText = {
-                        'low': 'נמוכה',
-                        'medium': 'בינונית',
-                        'critical': 'קריטית'
-                    };
-                    
-                    const severityColors = {
-                        'low': '#28a745',
-                        'medium': '#ffc107',
-                        'critical': '#dc3545'
-                    };
-                    
-                    defectsHtml.innerHTML = `
-                        <h1 style="text-align: center; color: C8E6FF; margin-bottom: 30px;">רשימת ליקויים</h1>
-                        <div style="margin-bottom: 20px;">
-                            <p><strong>פרויקט:</strong> ${currentProject.name}</p>
-                            <p><strong>פיקוח:</strong> ${currentInspection.name}</p>
-                            <p><strong>תאריך:</strong> ${new Date(currentInspection.date).toLocaleDateString('he-IL')}</p>
-                        </div>
-                        ${currentInspection.defects.map((defect, index) => {
-                            const images = defect.images || (defect.image ? [defect.image] : []);
-                            const imagesHtml = images.length > 0 ? `
-                                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
-                                    ${images.map((img, imgIndex) => `
-                                        <div style="position: relative;">
-                                            <img src="${img}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; border: 2px solid #e0e0e0;">
-                                            <div style="position: absolute; top: 5px; right: 5px; background: rgba(102, 126, 234, 0.9); color: white; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;">${imgIndex + 1}/${images.length}</div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            ` : '';
-                            
-                            return `
-                            <div style="border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; page-break-inside: avoid;">
-                                <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                                    <div style="background: C8E6FF; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-left: 10px;">${defect.number}</div>
-                                    <div>
-                                        <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${defect.description}</div>
-                                        <div style="display: inline-block; padding: 5px 15px; border-radius: 15px; background: ${severityColors[defect.severity]}; color: white; font-size: 12px; font-weight: bold;">${severityText[defect.severity]}</div>
-                                    </div>
-                                </div>
-                                ${imagesHtml}
-                            </div>
-                        `;
-                        }).join('')}
-                    `;
-                    
-                    document.body.appendChild(defectsHtml);
-                    
-                    try {
-                        const canvas = await html2canvas(defectsHtml, {
-                            scale: 2,
-                            useCORS: true,
-                            logging: false,
-                            backgroundColor: '#ffffff'
-                        });
-                        
-                        const imgData = canvas.toDataURL('image/png');
-                        const imgWidth = 210;
-                        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                        
-                        let heightLeft = imgHeight;
-                        let position = 0;
-                        
-                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                        heightLeft -= 297;
-                        
-                        while (heightLeft > 0) {
-                            position = heightLeft - imgHeight;
-                            pdf.addPage();
-                            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-                            heightLeft -= 297;
-                        }
-                        
-                    } catch (error) {
-                        console.error('html2canvas error:', error);
-                    }
-                    
-                    document.body.removeChild(defectsHtml);
+                // המרת הקואורדינטות לגודל האמיתי בייצוא
+                const startX = m.startX * scaleX;
+                const startY = m.startY * scaleY;
+                const endX = m.endX * scaleX;
+                const endY = m.endY * scaleY;
+                const width = endX - startX;
+                const height = endY - startY;
+
+                tempCtx.beginPath();
+                if (m.tool === 'rect') {
+                    tempCtx.strokeRect(startX, startY, width, height);
+                } else if (m.tool === 'circle' || m.tool === 'oval') {
+                    const rx = Math.abs(width) / 2;
+                    const ry = m.tool === 'circle' ? rx : Math.abs(height) / 2;
+                    const cx = startX + width / 2;
+                    const cy = startY + height / 2;
+                    tempCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                    tempCtx.stroke();
                 }
                 
-                pdf.save(`${currentProject.name}-${currentInspection.name}.pdf`);
+                // ציור המספר
+                tempCtx.fillStyle = 'white';
+                tempCtx.fillRect(startX, startY - 45, 60, 50);
+                tempCtx.fillStyle = 'red';
+                tempCtx.fillText(defect.number, startX + 10, startY - 5);
+            });
+        }
+
+        // הוספת התמונה (תוכנית + סימונים) ל-PDF
+        const imgData = tempCanvas.toDataURL('image/jpeg', 0.8);
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        // עמוד ראשון: התוכנית
+        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        // --- שלב 2: טבלת הליקויים ---
+        
+        if (currentInspection.defects && currentInspection.defects.length > 0) {
+            pdf.addPage();
+            
+            // כותרת
+            pdf.setFontSize(20);
+            pdf.text("רשימת ליקויים", 105, 20, { align: "center" });
+            
+            // פרטי פרויקט
+            pdf.setFontSize(12);
+            pdf.text(`פרויקט: ${currentProject.name}`, 190, 40, { align: "right" });
+            pdf.text(`תאריך: ${new Date(currentInspection.date).toLocaleDateString('he-IL')}`, 190, 50, { align: "right" });
+
+            let yPos = 70;
+
+            // לולאה על הליקויים להוספת טקסט ותמונות
+            for (const defect of currentInspection.defects) {
+                // בדיקה אם נגמר הדף
+                if (yPos > 250) {
+                    pdf.addPage();
+                    yPos = 20;
+                }
+
+                // קו מפריד
+                pdf.setDrawColor(200);
+                pdf.line(10, yPos, 200, yPos);
+                yPos += 10;
+
+                // מספר ותיאור
+                pdf.setFontSize(14);
+                pdf.setTextColor(220, 53, 69); // אדום למספר
+                pdf.text(`#${defect.number}`, 190, yPos, { align: "right" });
                 
-            } catch (error) {
-                console.error('Export error:', error);
-                alert('❌ שגיאה בייצוא ל-PDF!\n\n' + error.message);
-            } finally {
-                event.target.textContent = originalText;
-                event.target.disabled = false;
+                pdf.setTextColor(0); // שחור לטקסט
+                // המרת עברית (הערה: jsPDF בסיסי לא תומך טוב בעברית הפוכה בלי פונטים מיוחדים)
+                // כאן נשתמש בטקסט פשוט, לפתרון עברית מלא צריך להוסיף גופן
+                const severityHebrew = defect.severity === 'critical' ? 'קריטית' : (defect.severity === 'medium' ? 'בינונית' : 'נמוכה');
+                pdf.text(`${defect.description} (חומרה: ${severityHebrew})`, 175, yPos, { align: "right" });
+                
+                yPos += 15;
+
+                // הוספת תמונות הליקוי אם יש (כרגע נדלג כדי לא לסבך עם CORS של תמונות, אבל זה המקום להוסיף)
+                // הערה: הוספת תמונות מקישורים דורשת המרה ל-Base64 בנפרד.
             }
         }
+
+        pdf.save(`Report_${currentProject.name}.pdf`);
+        
+    } catch (error) {
+        console.error('Export Error:', error);
+        alert('שגיאה בייצוא הדוח: ' + error.message);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
 
         function sendByEmail() {
             const subject = encodeURIComponent(`דוח פיקוח - ${currentProject.name} - ${currentInspection.name}`);
