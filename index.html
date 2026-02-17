@@ -2690,33 +2690,31 @@ async function deleteInspection(event, inspectionId) {
 
          // משתנה גלובלי לניהול משימות הרינדור (למניעת התנגשויות)
          // משתנה עזר למניעת התנגשויות
-let renderTask = null;
+          let renderTask = null;
 
-async function renderPdf() {
-    if (!currentPdf) return;
+         async function renderPdf() {
+         if (!currentPdf) return;
 
-    if (renderTask) {
+        if (renderTask) {
         try {
             await renderTask.cancel();
         } catch (e) { }
     }
 
-    try {
+        try {
         currentPage = await currentPdf.getPage(1);
         
         const container = document.querySelector('.pdf-canvas-container');
-        const containerWidth = container.clientWidth; // רוחב המסך הנוכחי
+        const containerWidth = container.clientWidth; 
         
-        // 1. חישוב "קנה מידה בסיסי" - איך להכניס A0 למסך
-        // אנחנו שואלים את ה-PDF: מה הגודל המקורי שלך?
+        // 1. חישוב בסיס: מה קנה המידה כדי שהתוכנית תיכנס בדיוק ברוחב המסך?
         const unscaledViewport = currentPage.getViewport({ scale: 1.0 });
+        const scaleToFit = (containerWidth - 20) / unscaledViewport.width;
         
-        // היחס בין רוחב המסך לרוחב המקורי של התוכנית
-        const baseScale = (containerWidth - 30) / unscaledViewport.width;
-        
-        // 2. הזום שלנו מכפיל את קנה המידה הבסיסי
-        // zoomLevel = 1 אומר "רוחב מלא". zoomLevel = 2 אומר "פי 2 מהרוחב"
-        const finalScale = baseScale * zoomLevel;
+        // 2. הזום שלנו (zoomLevel) הוא מכפלה של ההתאמה למסך
+        // אם zoomLevel = 1, התוכנית תהיה בדיוק ברוחב המסך.
+        // אם zoomLevel = 2, היא תהיה פי 2 מרוחב המסך (זום אין).
+        const finalScale = scaleToFit * zoomLevel;
 
         const viewport = currentPage.getViewport({ scale: finalScale });
 
@@ -2724,12 +2722,13 @@ async function renderPdf() {
         const drawingCanvas = document.getElementById('drawingCanvas');
         const context = canvas.getContext('2d');
 
-        // עדכון גודל פיזי של הקנבס (זה מה שעושה את התוכנית חדה!)
+        // עדכון פיזי של גודל הקנבס (חשוב מאוד!)
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         drawingCanvas.height = viewport.height;
         drawingCanvas.width = viewport.width;
 
+        // רינדור ה-PDF
         renderTask = currentPage.render({
             canvasContext: context,
             viewport: viewport
@@ -2740,8 +2739,8 @@ async function renderPdf() {
         renderTask = null;
         document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
         
-        // העברת ה-Scale החדש כדי שהציורים יתאימו את עצמם
-        redrawMarkings(finalScale, baseScale);
+        // ציור הסימונים מחדש בהתאם לגודל החדש
+        redrawMarkings();
 
     } catch (error) {
         if (error.name !== 'RenderingCancelledException') {
@@ -2975,67 +2974,73 @@ function finishDrawing(endX, endY) {
     currentPath = [];
 }
 
-// פונקציית הציור מחדש המשודרגת (מטפלת בזום אוטומטית)
-function redrawMarkings() {
-    // ניקוי
-    drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-    if (!currentInspection.defects) return;
+         // פונקציית הציור מחדש המשודרגת (מטפלת בזום אוטומטית)
+             function redrawMarkings() {
+                const drawingCanvas = document.getElementById('drawingCanvas');
+                const ctx = drawingCanvas.getContext('2d');
+    
+         // ניקוי הקנבס לפני ציור מחדש
+             ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    
+             if (!currentInspection.defects) return;
 
-    const w = drawingCanvas.width;
-    const h = drawingCanvas.height;
+         // הגודל הנוכחי של הקנבס (אחרי הזום)
+              const w = drawingCanvas.width;
+              const h = drawingCanvas.height;
 
-    currentInspection.defects.forEach(defect => {
-        if (!defect.marking) return;
-        const m = defect.marking;
+             currentInspection.defects.forEach(defect => {
+             if (!defect.marking) return;
+             const m = defect.marking;
         
-        // המרת אחוזים חזרה לפיקסלים לפי הזום הנוכחי
-        // אם הנתונים ישנים (לפני התיקון הזה), הם בפיקסלים ולכן יהיו ענקיים/קטנים
-        // נניח שזה נתונים חדשים מנורמלים (0.0 עד 1.0)
-        
-        // הגנה לתמיכה לאחור (אם המספרים גדולים מ-1, הם פיקסלים ישנים)
-        let sx = m.startX > 1 ? m.startX : m.startX * w;
-        let sy = m.startY > 1 ? m.startY : m.startY * h;
-        let ex = m.endX > 1 ? m.endX : m.endX * w;
-        let ey = m.endY > 1 ? m.endY : m.endY * h;
-        
-        const color = m.color || '#dc3545'; // תמיכה לאחור באדום
+        // המרת מיקום יחסי (0-1) למיקום פיקסלי נוכחי
+        // הגנה: אם הנתונים ישנים (גדולים מ-1), נתייחס אליהם כפיקסלים (לא יעבדו טוב בזום, אבל לא יקרסו)
+        let sx = m.startX <= 1 ? m.startX * w : m.startX;
+        let sy = m.startY <= 1 ? m.startY * h : m.startY;
+        let ex = m.endX <= 1 ? m.endX * w : m.endX;
+        let ey = m.endY <= 1 ? m.endY * h : m.endY;
+
+        const color = m.color || '#dc3545';
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.font = 'bold 16px Arial';
 
         if (m.tool === 'freehand' && m.path) {
-            // שחזור נתיב חופשי
-            const scaledPath = m.path.map(p => ({
-                x: p.x > 1 ? p.x : p.x * w, // תמיכה לאחור
-                y: p.y > 1 ? p.y : p.y * h
-            }));
-            drawFreehandPath(scaledPath, color);
+            // ציור קו חופשי
+            ctx.beginPath();
+            m.path.forEach((p, i) => {
+                const px = p.x <= 1 ? p.x * w : p.x;
+                const py = p.y <= 1 ? p.y * h : p.y;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
             
-            // את המספר נשים בנקודה הראשונה
-            sx = scaledPath[0].x;
-            sy = scaledPath[0].y;
+            // נקודת התחלה למספר
+            sx = m.path[0].x <= 1 ? m.path[0].x * w : m.path[0].x;
+            sy = m.path[0].y <= 1 ? m.path[0].y * h : m.path[0].y;
             
         } else {
-            // ציור צורות רגילות
-            drawingContext.strokeStyle = color;
-            drawingContext.lineWidth = 3;
-            drawingContext.beginPath();
-            
+            // ציור צורות
+            ctx.beginPath();
             if (m.tool === 'rect') {
-                drawingContext.strokeRect(sx, sy, ex - sx, ey - sy);
+                ctx.strokeRect(sx, sy, ex - sx, ey - sy);
             } else if (m.tool === 'circle' || m.tool === 'oval') {
                 const rx = Math.abs(ex - sx) / 2;
                 const ry = m.tool === 'circle' ? rx : Math.abs(ey - sy) / 2;
-                const centerX = sx + (ex - sx) / 2;
-                const centerY = sy + (ey - sy) / 2;
-                drawingContext.ellipse(centerX, centerY, rx, ry, 0, 0, 2 * Math.PI);
-                drawingContext.stroke();
+                const cx = sx + (ex - sx) / 2;
+                const cy = sy + (ey - sy) / 2;
+                ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                ctx.stroke();
             }
         }
         
-        // ציור המספר
-        drawingContext.fillStyle = 'white';
-        drawingContext.fillRect(sx - 2, sy - 22, 25, 20);
-        drawingContext.fillStyle = color;
-        drawingContext.font = 'bold 20px Arial';
-        drawingContext.fillText(defect.number, sx, sy - 5);
+        // ציור המספר עם רקע
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillRect(sx, sy - 20, 20, 20);
+        ctx.fillStyle = color;
+        ctx.fillText(defect.number, sx + 5, sy - 5);
     });
 }
 
@@ -3245,17 +3250,25 @@ function redrawMarkings() {
 
         // --- פונקציות משופרות לניהול ליקויים ומיספור ---
 
-// פונקציית עזר לסידור מחדש של המספרים
-function renumberDefects() {
-    if (!currentInspection.defects) return;
+        // פונקציית עזר לסידור מחדש של המספרים
+           function renumberDefects() {
+           if (!currentInspection.defects) return;
 
-    // 1. מיון כרונולוגי לפי ה-ID (שהוא בעצם הזמן שנוצר הליקוי)
-    currentInspection.defects.sort((a, b) => a.id - b.id);
+        currentInspection.defects.sort((a, b) => {
+        const aHasMarking = !!a.marking;
+        const bHasMarking = !!b.marking;
 
-    // 2. מספור מחדש רציף (1, 2, 3...)
+        // אם לאחד יש סימון ולשני אין - בעל הסימון יופיע קודם
+        if (aHasMarking && !bHasMarking) return -1;
+        if (!aHasMarking && bHasMarking) return 1;
+
+        // אם לשניהם יש (או לשניהם אין) סימון - ממיינים לפי הזמן (ID)
+        return a.id - b.id;
+    });
+
+    // מספור מחדש לפי הסדר החדש
     currentInspection.defects.forEach((defect, index) => {
         defect.number = index + 1;
-        // אם יש סימון גרפי, מעדכנים גם את המספר שמופיע עליו
         if (defect.marking) {
             defect.marking.number = index + 1;
         }
