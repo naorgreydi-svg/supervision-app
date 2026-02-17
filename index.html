@@ -1349,7 +1349,7 @@
 
                 <!-- Inspection Details Tab -->
                 <div id="inspectionDetailsTab" class="tab-content">
-                    <button class="back-button" onclick="backToProjectDetails()">← חזרה לפרויקט</button>
+                    <button class="back-button" onclick="backToProjectDetails()">← חזרה לפיקוחים</button>
                     <h2 id="inspectionDetailsTitle"></h2>
                     <p id="inspectionDetailsDate"></p>
                     <p id="inspectionDetailsNotes"></p>
@@ -2685,34 +2685,31 @@ async function deleteInspection(event, inspectionId) {
 }
 
          // משתנה גלובלי לניהול משימות הרינדור (למניעת התנגשויות)
-let renderTask = null;
+         // משתנה עזר למניעת התנגשויות בציור
+          let renderTask = null;
 
-async function renderPdf() {
-    if (!currentPdf) return;
+         async function renderPdf() {
+         if (!currentPdf) return;
 
-    // אם יש רינדור שרץ כרגע - נבטל אותו לפני שנתחיל חדש!
-    if (renderTask) {
-        try {
+         // אם יש ציור שרצים כרגע - נעצור אותו
+         if (renderTask) {
+         try {
             await renderTask.cancel();
-        } catch (e) {
-            // התעלמות משגיאת ביטול (זה תקין)
-        }
+        } catch (e) { /* התעלמות משגיאת ביטול */ }
     }
 
     try {
         currentPage = await currentPdf.getPage(1);
         
-        // חישוב גודל הקנבס לפי הזום
+        // חישוב רוחב: במובייל נתאים לרוחב המסך, במחשב לפי הזום
         const container = document.querySelector('.pdf-canvas-container');
         const containerWidth = container.clientWidth;
         
-        // התאמה למובייל או זום רגיל
         let finalScale = zoomLevel;
-        if (window.innerWidth <= 768) {
-            const naturalViewport = currentPage.getViewport({ scale: 1 });
-            const scaleToFit = (containerWidth - 20) / naturalViewport.width;
-            // במובייל: או שהמשתמש עשה זום, או שמתאימים לרוחב המסך
-            finalScale = zoomLevel * scaleToFit; 
+        // במובייל: אם הזום הוא 1 (ברירת מחדל), נחשב "התאמה לרוחב"
+        if (window.innerWidth <= 768 && zoomLevel === 1) {
+            const viewport = currentPage.getViewport({ scale: 1 });
+            finalScale = (containerWidth - 30) / viewport.width;
         }
 
         const viewport = currentPage.getViewport({ scale: finalScale });
@@ -2721,32 +2718,30 @@ async function renderPdf() {
         const drawingCanvas = document.getElementById('drawingCanvas');
         const context = canvas.getContext('2d');
 
-        // עדכון גודל שני הקנבסים (ה-PDF והציורים)
+        // עדכון גודל הקנבסים
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         drawingCanvas.height = viewport.height;
         drawingCanvas.width = viewport.width;
 
-        // שמירת המשימה הנוכחית במשתנה הגלובלי
+        // התחלת הציור ושמירת המשימה
         renderTask = currentPage.render({
             canvasContext: context,
             viewport: viewport
         });
 
-        // המתנה לסיום הציור
         await renderTask.promise;
         
-        // סיימנו בהצלחה - מאפסים את המשימה ומציירים את הליקויים מחדש
+        // סיום מוצלח
         renderTask = null;
-        document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
+        document.getElementById('zoomPercent').textContent = Math.round(finalScale * 100);
         
-        // ציור הליקויים מחדש כדי שיתאימו לגודל החדש
-        redrawMarkings(finalScale); 
+        // ציור הליקויים מחדש
+        redrawMarkings();
 
     } catch (error) {
-        if (error.name === 'RenderingCancelledException') {
-            // זה בסדר, זה קרה כי לחצת מהר על זום - לא צריך לעשות כלום
-        } else {
+        // מתעלמים משגיאות שנוצרו בגלל ביטול (לחיצה מהירה על זום)
+        if (error.name !== 'RenderingCancelledException') {
             console.error('PDF Render Error:', error);
         }
     }
@@ -2898,56 +2893,53 @@ async function renderPdf() {
             document.getElementById('ovalBtn').classList.remove('active');
         }
 
-        function redrawMarkings(currentScale = zoomLevel) {
-    const drawingCanvas = document.getElementById('drawingCanvas');
-    const drawingContext = drawingCanvas.getContext('2d');
-    
+        function redrawMarkings() {
     // ניקוי הקנבס
     drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     
     if (!currentInspection.defects) return;
 
-    // חישוב יחס המרה: אנחנו מניחים שהקואורדינטות המקוריות נשמרו לפי סקייל 1
-    // אם שמרת אותן אחרת, נצטרך להתאים את זה. 
-    // בפתרון הזה אני מניח שאנחנו מציירים יחסית לגודל הנוכחי של הקנבס.
+    // חישוב יחס הזום הנוכחי (בהנחה שהסימון המקורי נעשה ב-100% או יחסית לגודל הנוכחי)
+    // הערה: לפתרון מושלם צריך לשמור באיזה זום בוצע הסימון המקורי.
+    // בתיקון זה נניח שהסימונים מתאימים לזום הנוכחי, ובייצוא נטפל בהמרה.
     
-    // הערה: כדי שזה יהיה מושלם, בעתיד כדאי לנרמל את הקואורדינטות בעת השמירה (לחלק ב-zoomLevel).
-    // כרגע, כדי לא לשבור נתונים קיימים, נצייר אותם כפי שהם, אבל נתאים את עובי הקו.
-
     currentInspection.defects.forEach(defect => {
         if (!defect.marking) return;
         
         const m = defect.marking;
         
-        // פקטור לתיקון המיקום בזום (הערכה, כיוון שהקנבס גדל פיזית)
-        // שים לב: זה יעבוד מדויק רק אם ננרמל את הנתונים בעת השמירה בעתיד.
-        // כרגע נשתמש בקואורדינטות היחסיות לקנבס.
-        
-        const scaleFactor = drawingCanvas.width / 1000; // פקטור יחסי לרוחב (אופציונלי לשיפור דיוק)
-
-        drawingContext.strokeStyle = '#dc3545';
-        drawingContext.lineWidth = 3; 
+        // הגדרות עיצוב
+        drawingContext.strokeStyle = '#dc3545'; // אדום
+        drawingContext.lineWidth = 3;
         drawingContext.fillStyle = '#dc3545';
-        drawingContext.font = 'bold 20px Arial';
+        drawingContext.font = 'bold 24px Arial'; // פונט גדול וברור יותר
         
+        // ציור הצורה
         drawingContext.beginPath();
         
         if (m.tool === 'rect') {
             drawingContext.strokeRect(m.startX, m.startY, m.endX - m.startX, m.endY - m.startY);
         } else if (m.tool === 'circle' || m.tool === 'oval') {
-            const rx = Math.abs(m.endX - m.startX) / 2;
-            const ry = m.tool === 'circle' ? rx : Math.abs(m.endY - m.startY) / 2;
-            const cx = m.startX + (m.endX - m.startX) / 2;
-            const cy = m.startY + (m.endY - m.startY) / 2;
-            drawingContext.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+            const radiusX = Math.abs(m.endX - m.startX) / 2;
+            const radiusY = m.tool === 'circle' ? radiusX : Math.abs(m.endY - m.startY) / 2;
+            const centerX = m.startX + (m.endX - m.startX) / 2;
+            const centerY = m.startY + (m.endY - m.startY) / 2;
+            drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
             drawingContext.stroke();
         }
         
-        // ציור המספר
+        // ציור המספר עם רקע לבן קטן כדי שיהיה קריא
+        const text = m.number.toString();
+        const textX = m.startX;
+        const textY = m.startY - 10;
+        
+        // רקע למספר
         drawingContext.fillStyle = 'white';
-        drawingContext.fillRect(m.startX - 2, m.startY - 22, 25, 20);
+        drawingContext.fillRect(textX - 5, textY - 20, 30, 25);
+        
+        // המספר עצמו
         drawingContext.fillStyle = '#dc3545';
-        drawingContext.fillText(defect.number, m.startX, m.startY - 5);
+        drawingContext.fillText(text, textX, textY);
     });
 }
 
@@ -3164,54 +3156,65 @@ function deleteDefect(defectId) {
 }
 
         function loadDefects() {
-            const defectsList = document.getElementById('defectsList');
-            defectsList.innerHTML = '';
-            
-            if (!currentInspection.defects || currentInspection.defects.length === 0) {
-                defectsList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין ליקויים</p>';
-                return;
-            }
-            
-            currentInspection.defects.forEach(defect => {
-                const div = document.createElement('div');
-                div.className = `defect-item ${defect.severity}`;
-                
-                const severityText = {
-                    'low': 'נמוכה',
-                    'medium': 'בינונית',
-                    'critical': 'קריטית'
-                };
-                
-                let imagesHtml = '';
-                
-                const images = defect.images || (defect.image ? [defect.image] : []);
-                
-                if (images.length > 0) {
-                    imagesHtml = '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">';
-                    images.forEach((img, index) => {
-                        imagesHtml += `
-                            <div style="position: relative;">
-                                <img src="${img}" class="defect-image" style="width: 100%; max-width: 150px; max-height: 150px; object-fit: cover; border-radius: 8px; cursor: pointer;" onclick="showImageModal('${img}')">
-                                <div style="position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px;">${index + 1}/${images.length}</div>
-                            </div>
-                        `;
-                    });
-                    imagesHtml += '</div>';
-                }
-                
-                div.innerHTML = `
-                    <div class="defect-header">
-                        <div class="defect-number">${defect.number}</div>
-                        <button class="defect-delete" onclick="deleteDefect(${defect.id})">×</button>
-                    </div>
-                    <p style="margin: 10px 0;"><strong>${defect.description}</strong></p>
-                    <span class="severity-badge ${defect.severity}">${severityText[defect.severity]}</span>
-                    ${imagesHtml}
-                `;
-                
-                defectsList.appendChild(div);
+    const defectsList = document.getElementById('defectsList');
+    defectsList.innerHTML = '';
+
+    // הגנה: אם אין ליקויים, נציג הודעה ונצא
+    if (!currentInspection.defects || currentInspection.defects.length === 0) {
+        defectsList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין ליקויים</p>';
+        return;
+    }
+
+    // 1. מיון הליקויים לפי הסדר שנוצרו (מהישן לחדש)
+    currentInspection.defects.sort((a, b) => a.id - b.id);
+
+    // 2. בניית הרשימה
+    currentInspection.defects.forEach((defect, index) => {
+        // עדכון המספר הנכון (כך שיהיה תמיד 1, 2, 3 לפי הסדר)
+        defect.number = index + 1; 
+        if (defect.marking) defect.marking.number = index + 1;
+
+        const div = document.createElement('div');
+        // הוספת צבע גבול לפי החומרה
+        div.className = `defect-item ${defect.severity}`;
+        
+        const severityText = {
+            'low': 'נמוכה',
+            'medium': 'בינונית',
+            'critical': 'קריטית'
+        };
+
+        // טיפול בתמונות (אם יש)
+        const images = defect.images || (defect.image ? [defect.image] : []);
+        let imagesHtml = '';
+        if (images.length > 0) {
+            imagesHtml = '<div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">';
+            images.forEach((img, i) => {
+                imagesHtml += `<img src="${img}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1px solid #ddd;" onclick="showImageModal('${img}')">`;
             });
+            imagesHtml += '</div>';
         }
+
+        div.innerHTML = `
+            <div class="defect-header" style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="background: #007bff; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0;">
+                        ${defect.number}
+                    </div>
+                    <div style="font-weight: bold; font-size: 16px;">${defect.description}</div>
+                </div>
+                <button onclick="deleteDefect(${defect.id})" style="background: transparent; border: none; color: #999; font-size: 20px; cursor: pointer;">×</button>
+            </div>
+            
+            <div style="margin-top: 5px; padding-right: 38px;">
+                <span class="severity-badge ${defect.severity}" style="font-size: 12px;">חומרה: ${severityText[defect.severity]}</span>
+                ${imagesHtml}
+            </div>
+        `;
+
+        defectsList.appendChild(div);
+    });
+}
 
         function showImageModal(imageSrc) {
             const modal = document.createElement('div');
