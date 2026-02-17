@@ -2684,45 +2684,73 @@ async function deleteInspection(event, inspectionId) {
     }
 }
 
-        async function renderPdf() {
-            if (!currentPdf) return;
-            
-            currentPage = await currentPdf.getPage(1);
-            
-            const container = document.querySelector('.pdf-canvas-container');
-            const containerWidth = container.clientWidth;
-            const isMobile = window.innerWidth <= 768;
-            
-            const naturalViewport = currentPage.getViewport({ scale: 1 });
-            
-            let finalScale = zoomLevel;
-            if (isMobile) {
-                const scaleToFit = (containerWidth - 40) / naturalViewport.width;
-                finalScale = zoomLevel * Math.min(scaleToFit, 1);
-            }
-            
-            const viewport = currentPage.getViewport({ scale: finalScale });
-            
-            const canvas = document.getElementById('pdfCanvas');
-            const drawingCanvas = document.getElementById('drawingCanvas');
-            const context = canvas.getContext('2d');
-            
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            drawingCanvas.height = viewport.height;
-            drawingCanvas.width = viewport.width;
-            
-            const renderContext = {
-                canvasContext: context,
-                viewport: viewport
-            };
-            
-            await currentPage.render(renderContext).promise;
-            
-            redrawMarkings();
-            
-            document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
+         // משתנה גלובלי לניהול משימות הרינדור (למניעת התנגשויות)
+let renderTask = null;
+
+async function renderPdf() {
+    if (!currentPdf) return;
+
+    // אם יש רינדור שרץ כרגע - נבטל אותו לפני שנתחיל חדש!
+    if (renderTask) {
+        try {
+            await renderTask.cancel();
+        } catch (e) {
+            // התעלמות משגיאת ביטול (זה תקין)
         }
+    }
+
+    try {
+        currentPage = await currentPdf.getPage(1);
+        
+        // חישוב גודל הקנבס לפי הזום
+        const container = document.querySelector('.pdf-canvas-container');
+        const containerWidth = container.clientWidth;
+        
+        // התאמה למובייל או זום רגיל
+        let finalScale = zoomLevel;
+        if (window.innerWidth <= 768) {
+            const naturalViewport = currentPage.getViewport({ scale: 1 });
+            const scaleToFit = (containerWidth - 20) / naturalViewport.width;
+            // במובייל: או שהמשתמש עשה זום, או שמתאימים לרוחב המסך
+            finalScale = zoomLevel * scaleToFit; 
+        }
+
+        const viewport = currentPage.getViewport({ scale: finalScale });
+
+        const canvas = document.getElementById('pdfCanvas');
+        const drawingCanvas = document.getElementById('drawingCanvas');
+        const context = canvas.getContext('2d');
+
+        // עדכון גודל שני הקנבסים (ה-PDF והציורים)
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        drawingCanvas.height = viewport.height;
+        drawingCanvas.width = viewport.width;
+
+        // שמירת המשימה הנוכחית במשתנה הגלובלי
+        renderTask = currentPage.render({
+            canvasContext: context,
+            viewport: viewport
+        });
+
+        // המתנה לסיום הציור
+        await renderTask.promise;
+        
+        // סיימנו בהצלחה - מאפסים את המשימה ומציירים את הליקויים מחדש
+        renderTask = null;
+        document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
+        
+        // ציור הליקויים מחדש כדי שיתאימו לגודל החדש
+        redrawMarkings(finalScale); 
+
+    } catch (error) {
+        if (error.name === 'RenderingCancelledException') {
+            // זה בסדר, זה קרה כי לחצת מהר על זום - לא צריך לעשות כלום
+        } else {
+            console.error('PDF Render Error:', error);
+        }
+    }
+}
 
         function zoomIn() {
             zoomLevel += 0.1;
@@ -2870,53 +2898,56 @@ async function deleteInspection(event, inspectionId) {
             document.getElementById('ovalBtn').classList.remove('active');
         }
 
-        function redrawMarkings() {
+        function redrawMarkings(currentScale = zoomLevel) {
+    const drawingCanvas = document.getElementById('drawingCanvas');
+    const drawingContext = drawingCanvas.getContext('2d');
+    
     // ניקוי הקנבס
     drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
     
     if (!currentInspection.defects) return;
 
-    // חישוב יחס הזום הנוכחי (בהנחה שהסימון המקורי נעשה ב-100% או יחסית לגודל הנוכחי)
-    // הערה: לפתרון מושלם צריך לשמור באיזה זום בוצע הסימון המקורי.
-    // בתיקון זה נניח שהסימונים מתאימים לזום הנוכחי, ובייצוא נטפל בהמרה.
+    // חישוב יחס המרה: אנחנו מניחים שהקואורדינטות המקוריות נשמרו לפי סקייל 1
+    // אם שמרת אותן אחרת, נצטרך להתאים את זה. 
+    // בפתרון הזה אני מניח שאנחנו מציירים יחסית לגודל הנוכחי של הקנבס.
     
+    // הערה: כדי שזה יהיה מושלם, בעתיד כדאי לנרמל את הקואורדינטות בעת השמירה (לחלק ב-zoomLevel).
+    // כרגע, כדי לא לשבור נתונים קיימים, נצייר אותם כפי שהם, אבל נתאים את עובי הקו.
+
     currentInspection.defects.forEach(defect => {
         if (!defect.marking) return;
         
         const m = defect.marking;
         
-        // הגדרות עיצוב
-        drawingContext.strokeStyle = '#dc3545'; // אדום
-        drawingContext.lineWidth = 3;
-        drawingContext.fillStyle = '#dc3545';
-        drawingContext.font = 'bold 24px Arial'; // פונט גדול וברור יותר
+        // פקטור לתיקון המיקום בזום (הערכה, כיוון שהקנבס גדל פיזית)
+        // שים לב: זה יעבוד מדויק רק אם ננרמל את הנתונים בעת השמירה בעתיד.
+        // כרגע נשתמש בקואורדינטות היחסיות לקנבס.
         
-        // ציור הצורה
+        const scaleFactor = drawingCanvas.width / 1000; // פקטור יחסי לרוחב (אופציונלי לשיפור דיוק)
+
+        drawingContext.strokeStyle = '#dc3545';
+        drawingContext.lineWidth = 3; 
+        drawingContext.fillStyle = '#dc3545';
+        drawingContext.font = 'bold 20px Arial';
+        
         drawingContext.beginPath();
         
         if (m.tool === 'rect') {
             drawingContext.strokeRect(m.startX, m.startY, m.endX - m.startX, m.endY - m.startY);
         } else if (m.tool === 'circle' || m.tool === 'oval') {
-            const radiusX = Math.abs(m.endX - m.startX) / 2;
-            const radiusY = m.tool === 'circle' ? radiusX : Math.abs(m.endY - m.startY) / 2;
-            const centerX = m.startX + (m.endX - m.startX) / 2;
-            const centerY = m.startY + (m.endY - m.startY) / 2;
-            drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            const rx = Math.abs(m.endX - m.startX) / 2;
+            const ry = m.tool === 'circle' ? rx : Math.abs(m.endY - m.startY) / 2;
+            const cx = m.startX + (m.endX - m.startX) / 2;
+            const cy = m.startY + (m.endY - m.startY) / 2;
+            drawingContext.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
             drawingContext.stroke();
         }
         
-        // ציור המספר עם רקע לבן קטן כדי שיהיה קריא
-        const text = m.number.toString();
-        const textX = m.startX;
-        const textY = m.startY - 10;
-        
-        // רקע למספר
+        // ציור המספר
         drawingContext.fillStyle = 'white';
-        drawingContext.fillRect(textX - 5, textY - 20, 30, 25);
-        
-        // המספר עצמו
+        drawingContext.fillRect(m.startX - 2, m.startY - 22, 25, 20);
         drawingContext.fillStyle = '#dc3545';
-        drawingContext.fillText(text, textX, textY);
+        drawingContext.fillText(defect.number, m.startX, m.startY - 5);
     });
 }
 
