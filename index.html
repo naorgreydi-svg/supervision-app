@@ -34,6 +34,38 @@
     direction: rtl;
 }
 
+        /* עדכון סגנונות לקנבס - פותר את הבעיה שהתוכנית לא גדלה */
+.pdf-canvas-container {
+    position: relative;
+    overflow: auto;
+    /* הגדרת גובה מקסימלי כדי לאפשר גלילה */
+    height: 70vh; 
+    background: #525659; /* רקע אפור כהה כמו ב-Acrobat */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+}
+
+/* מעטפת שתחזיק את שני הקנבסים יחד */
+#canvasWrapper {
+    position: relative;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+#pdfCanvas {
+    display: block;
+    /* חשוב: מבטל הגבלות CSS שמונעות גדילה */
+    max-width: none; 
+}
+
+#drawingCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: auto; /* מאפשר ציור */
+    touch-action: none;
+}
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -1393,12 +1425,11 @@
                                    </div>
                                 </div>
                                 <div class="pdf-canvas-container">
-                                    <div style="position: relative; display: inline-block;">
-                                        <canvas id="pdfCanvas"></canvas>
-                                        <canvas id="drawingCanvas"></canvas>
-                                    </div>
+                                  <div id="canvasWrapper">
+                                    <canvas id="pdfCanvas"></canvas>
+                                    <canvas id="drawingCanvas"></canvas>
                                 </div>
-                            </div>
+                              </div>
                             
                             <div class="defects-sidebar">
                                 <h3>רשימת ליקויים</h3>
@@ -2690,45 +2721,49 @@ async function deleteInspection(event, inspectionId) {
 
          // משתנה גלובלי לניהול משימות הרינדור (למניעת התנגשויות)
          // משתנה עזר למניעת התנגשויות
-          let renderTask = null;
+         let renderTask = null;
 
-         async function renderPdf() {
-         if (!currentPdf) return;
+async function renderPdf() {
+    if (!currentPdf) return;
 
-        if (renderTask) {
-        try {
-            await renderTask.cancel();
-        } catch (e) { }
+    if (renderTask) {
+        try { await renderTask.cancel(); } catch (e) { }
     }
 
-        try {
+    try {
         currentPage = await currentPdf.getPage(1);
         
         const container = document.querySelector('.pdf-canvas-container');
-        const containerWidth = container.clientWidth; 
+        // הפחתת שוליים מהרוחב כדי שלא יגלוש
+        const availableWidth = container.clientWidth - 40; 
         
-        // 1. חישוב בסיס: מה קנה המידה כדי שהתוכנית תיכנס בדיוק ברוחב המסך?
+        // 1. קבלת הגודל המקורי האמיתי של ה-PDF
         const unscaledViewport = currentPage.getViewport({ scale: 1.0 });
-        const scaleToFit = (containerWidth - 20) / unscaledViewport.width;
         
-        // 2. הזום שלנו (zoomLevel) הוא מכפלה של ההתאמה למסך
-        // אם zoomLevel = 1, התוכנית תהיה בדיוק ברוחב המסך.
-        // אם zoomLevel = 2, היא תהיה פי 2 מרוחב המסך (זום אין).
+        // 2. חישוב: כמה צריך להקטין/להגדיל כדי שייכנס ברוחב המסך?
+        const scaleToFit = availableWidth / unscaledViewport.width;
+        
+        // 3. החלת הזום של המשתמש על ההתאמה למסך
+        // אם המשתמש לא נגע בזום, zoomLevel הוא 1.
         const finalScale = scaleToFit * zoomLevel;
 
         const viewport = currentPage.getViewport({ scale: finalScale });
 
         const canvas = document.getElementById('pdfCanvas');
         const drawingCanvas = document.getElementById('drawingCanvas');
+        const wrapper = document.getElementById('canvasWrapper');
         const context = canvas.getContext('2d');
 
-        // עדכון פיזי של גודל הקנבס (חשוב מאוד!)
+        // עדכון הגודל הפיזי של האלמנטים
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         drawingCanvas.height = viewport.height;
         drawingCanvas.width = viewport.width;
+        
+        // עדכון גודל המעטפת כדי שתתאים בדיוק
+        wrapper.style.width = `${viewport.width}px`;
+        wrapper.style.height = `${viewport.height}px`;
 
-        // רינדור ה-PDF
         renderTask = currentPage.render({
             canvasContext: context,
             viewport: viewport
@@ -2739,13 +2774,10 @@ async function deleteInspection(event, inspectionId) {
         renderTask = null;
         document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
         
-        // ציור הסימונים מחדש בהתאם לגודל החדש
         redrawMarkings();
 
     } catch (error) {
-        if (error.name !== 'RenderingCancelledException') {
-            console.error('PDF Render Error:', error);
-        }
+        if (error.name !== 'RenderingCancelledException') console.error(error);
     }
 }
 
@@ -3133,11 +3165,14 @@ function finishDrawing(endX, endY) {
             }
         });
 
-        function addManualDefect() {
-            tempMarking = null;
-            defectCounter++;
-            openAddDefectModal();
-        }
+       // פונקציה להוספת הערה כללית (במקום ליקוי ידני)
+function addGeneralNote() {
+    tempMarking = null; // מוודאים שאין סימון
+    // פותחים את המודל כרגיל, הטופס יזהה שאין marking וישמור כהערה
+    openAddDefectModal();
+    // שינוי כותרת המודל ויזואלית (אופציונלי)
+    document.querySelector('#addDefectModal h2').textContent = 'הוספת הערה כללית';
+}
 
         document.getElementById('addDefectForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -3251,26 +3286,31 @@ function finishDrawing(endX, endY) {
         // --- פונקציות משופרות לניהול ליקויים ומיספור ---
 
         // פונקציית עזר לסידור מחדש של המספרים
-           function renumberDefects() {
-           if (!currentInspection.defects) return;
+          function renumberDefects() {
+    if (!currentInspection.defects) return;
 
-        currentInspection.defects.sort((a, b) => {
-        const aHasMarking = !!a.marking;
-        const bHasMarking = !!b.marking;
+    // מיון: קודם כל ליקויים עם סימון (לפי סדר יצירה), ואז הערות כלליות
+    currentInspection.defects.sort((a, b) => {
+        const aMarked = !!a.marking;
+        const bMarked = !!b.marking;
 
-        // אם לאחד יש סימון ולשני אין - בעל הסימון יופיע קודם
-        if (aHasMarking && !bHasMarking) return -1;
-        if (!aHasMarking && bHasMarking) return 1;
-
-        // אם לשניהם יש (או לשניהם אין) סימון - ממיינים לפי הזמן (ID)
-        return a.id - b.id;
+        if (aMarked && !bMarked) return -1; // מסומן עולה למעלה
+        if (!aMarked && bMarked) return 1;  // לא מסומן יורד למטה
+        
+        return a.id - b.id; // מיון פנימי לפי זמן
     });
 
-    // מספור מחדש לפי הסדר החדש
-    currentInspection.defects.forEach((defect, index) => {
-        defect.number = index + 1;
+    // מספור מחדש:
+    // רק ליקויים עם סימון מקבלים מספר (1, 2, 3...)
+    // ליקויים ללא סימון נשארים בלי מספר (או מקבלים 0)
+    let counter = 0;
+    currentInspection.defects.forEach((defect) => {
         if (defect.marking) {
-            defect.marking.number = index + 1;
+            counter++;
+            defect.number = counter;
+            defect.marking.number = counter;
+        } else {
+            defect.number = null; // הערה כללית - ללא מספר
         }
     });
 }
@@ -3318,37 +3358,33 @@ function deleteDefect(defectId) {
     const defectsList = document.getElementById('defectsList');
     defectsList.innerHTML = '';
 
-    // הגנה: אם אין ליקויים, נציג הודעה ונצא
     if (!currentInspection.defects || currentInspection.defects.length === 0) {
-        defectsList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין ליקויים</p>';
+        defectsList.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">אין ליקויים או הערות</p>';
         return;
     }
 
-    // 1. מיון הליקויים לפי הסדר שנוצרו (מהישן לחדש)
-    currentInspection.defects.sort((a, b) => a.id - b.id);
-
-    // 2. בניית הרשימה
-    currentInspection.defects.forEach((defect, index) => {
-        // עדכון המספר הנכון (כך שיהיה תמיד 1, 2, 3 לפי הסדר)
-        defect.number = index + 1; 
-        if (defect.marking) defect.marking.number = index + 1;
-
+    currentInspection.defects.forEach((defect) => {
         const div = document.createElement('div');
-        // הוספת צבע גבול לפי החומרה
         div.className = `defect-item ${defect.severity}`;
         
-        const severityText = {
-            'low': 'נמוכה',
-            'medium': 'בינונית',
-            'critical': 'קריטית'
-        };
+        // בדיקה: האם זה ליקוי ממוספר או הערה כללית?
+        let badgeHtml;
+        if (defect.number) {
+            // עיגול כחול עם מספר
+            badgeHtml = `<div style="background: #007bff; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0;">${defect.number}</div>`;
+        } else {
+            // אייקון של הערה (אפור)
+            badgeHtml = `<div style="background: #6c757d; color: white; width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">📝</div>`;
+        }
+        
+        const severityText = { 'low': 'נמוכה', 'medium': 'בינונית', 'critical': 'קריטית' };
 
-        // טיפול בתמונות (אם יש)
+        // תמונות
         const images = defect.images || (defect.image ? [defect.image] : []);
         let imagesHtml = '';
         if (images.length > 0) {
             imagesHtml = '<div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">';
-            images.forEach((img, i) => {
+            images.forEach((img) => {
                 imagesHtml += `<img src="${img}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 1px solid #ddd;" onclick="showImageModal('${img}')">`;
             });
             imagesHtml += '</div>';
@@ -3357,16 +3393,14 @@ function deleteDefect(defectId) {
         div.innerHTML = `
             <div class="defect-header" style="display: flex; justify-content: space-between; align-items: start;">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="background: #007bff; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0;">
-                        ${defect.number}
-                    </div>
+                    ${badgeHtml}
                     <div style="font-weight: bold; font-size: 16px;">${defect.description}</div>
                 </div>
                 <button onclick="deleteDefect(${defect.id})" style="background: transparent; border: none; color: #999; font-size: 20px; cursor: pointer;">×</button>
             </div>
             
             <div style="margin-top: 5px; padding-right: 38px;">
-                <span class="severity-badge ${defect.severity}" style="font-size: 12px;">חומרה: ${severityText[defect.severity]}</span>
+                <span class="severity-badge ${defect.severity}" style="font-size: 12px;">${defect.number ? 'חומרה' : 'דחיפות'}: ${severityText[defect.severity]}</span>
                 ${imagesHtml}
             </div>
         `;
