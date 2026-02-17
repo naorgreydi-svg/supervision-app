@@ -633,8 +633,7 @@
 
         #pdfCanvas {
             display: block;
-            max-width: 100%;
-            height: auto;
+            max-width: none;
         }
 
         #drawingCanvas {
@@ -979,9 +978,7 @@
 
             #pdfCanvas,
             #drawingCanvas {
-                max-width: 100%;
-                height: auto !important;
-                width: auto !important;
+                max-width: none;
             }
 
             #drawingCanvas {
@@ -2793,26 +2790,7 @@ async function renderPdf() {
             }
         }
 
-        function selectTool(tool) {
-            drawingTool = tool;
-            
-            document.getElementById('rectBtn').classList.remove('active');
-            document.getElementById('circleBtn').classList.remove('active');
-            document.getElementById('ovalBtn').classList.remove('active');
-            
-            if (tool === 'rect') document.getElementById('rectBtn').classList.add('active');
-            if (tool === 'circle') document.getElementById('circleBtn').classList.add('active');
-            if (tool === 'oval') document.getElementById('ovalBtn').classList.add('active');
-            
-            const isMobile = window.innerWidth <= 768;
-            if (isMobile) {
-                const toolNames = {
-                    'rect': 'מלבן',
-                    'circle': 'עיגול',
-                    'oval': 'אובלי'
-                };
-            }
-        }
+        // selectTool defined below (removed duplicate)
 
         // Drawing on PDF
         // --- משתנים גלובליים לציור ---
@@ -3076,55 +3054,7 @@ function finishDrawing(endX, endY) {
     });
 }
 
-        function redrawMarkings() {
-    // ניקוי הקנבס
-    drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-    
-    if (!currentInspection.defects) return;
-
-    // חישוב יחס הזום הנוכחי (בהנחה שהסימון המקורי נעשה ב-100% או יחסית לגודל הנוכחי)
-    // הערה: לפתרון מושלם צריך לשמור באיזה זום בוצע הסימון המקורי.
-    // בתיקון זה נניח שהסימונים מתאימים לזום הנוכחי, ובייצוא נטפל בהמרה.
-    
-    currentInspection.defects.forEach(defect => {
-        if (!defect.marking) return;
-        
-        const m = defect.marking;
-        
-        // הגדרות עיצוב
-        drawingContext.strokeStyle = '#dc3545'; // אדום
-        drawingContext.lineWidth = 3;
-        drawingContext.fillStyle = '#dc3545';
-        drawingContext.font = 'bold 24px Arial'; // פונט גדול וברור יותר
-        
-        // ציור הצורה
-        drawingContext.beginPath();
-        
-        if (m.tool === 'rect') {
-            drawingContext.strokeRect(m.startX, m.startY, m.endX - m.startX, m.endY - m.startY);
-        } else if (m.tool === 'circle' || m.tool === 'oval') {
-            const radiusX = Math.abs(m.endX - m.startX) / 2;
-            const radiusY = m.tool === 'circle' ? radiusX : Math.abs(m.endY - m.startY) / 2;
-            const centerX = m.startX + (m.endX - m.startX) / 2;
-            const centerY = m.startY + (m.endY - m.startY) / 2;
-            drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-            drawingContext.stroke();
-        }
-        
-        // ציור המספר עם רקע לבן קטן כדי שיהיה קריא
-        const text = m.number.toString();
-        const textX = m.startX;
-        const textY = m.startY - 10;
-        
-        // רקע למספר
-        drawingContext.fillStyle = 'white';
-        drawingContext.fillRect(textX - 5, textY - 20, 30, 25);
-        
-        // המספר עצמו
-        drawingContext.fillStyle = '#dc3545';
-        drawingContext.fillText(text, textX, textY);
-    });
-}
+        // redrawMarkings duplicate removed - using the version above that handles relative coordinates and zoom
 
         // Defects Management
         function openAddDefectModal(marking = null) {
