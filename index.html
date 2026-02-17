@@ -1378,15 +1378,19 @@
                         <div class="pdf-viewer">
                             <div class="pdf-container">
                                 <div class="pdf-toolbar">
-                                    <button onclick="zoomIn()">🔍+</button>
-                                    <button onclick="zoomOut()">🔍-</button>
-                                    <span class="zoom-info"><span id="zoomPercent">100</span>%</span>
+                                    <div style="display: flex; gap: 5px; align-items: center;">
+                                       <button onclick="zoomIn()">🔍+</button>
+                                       <button onclick="zoomOut()">🔍-</button>
+                                       <span class="zoom-info"><span id="zoomPercent">100</span>%</span>
+                                    </div>
                                     <span style="color: white; margin: 0 10px;">|</span>
-                                    <button id="rectBtn" onclick="selectTool('rect')">▭ מלבן</button>
-                                    <button id="circleBtn" onclick="selectTool('circle')">● עיגול</button>
-                                    <button id="ovalBtn" onclick="selectTool('oval')">⬭ אובלי</button>
-                                    <span style="color: white; margin: 0 10px;">|</span>
-                                    <button onclick="renderPdf()">🔄 רענן</button>
+                                    <div style="display: flex; gap: 5px; align-items: center;">
+                                       <input type="color" id="colorPicker" value="#dc3545" style="height: 30px; width: 40px; cursor: pointer; border: none; padding: 0;">
+        
+                                       <button id="freehandBtn" onclick="selectTool('freehand')">✏️ עט</button>
+                                       <button id="rectBtn" onclick="selectTool('rect')">▭ מלבן</button>
+                                       <button id="circleBtn" onclick="selectTool('circle')">● עיגול</button>
+                                   </div>
                                 </div>
                                 <div class="pdf-canvas-container">
                                     <div style="position: relative; display: inline-block;">
@@ -2685,32 +2689,34 @@ async function deleteInspection(event, inspectionId) {
 }
 
          // משתנה גלובלי לניהול משימות הרינדור (למניעת התנגשויות)
-         // משתנה עזר למניעת התנגשויות בציור
-          let renderTask = null;
+         // משתנה עזר למניעת התנגשויות
+let renderTask = null;
 
-         async function renderPdf() {
-         if (!currentPdf) return;
+async function renderPdf() {
+    if (!currentPdf) return;
 
-         // אם יש ציור שרצים כרגע - נעצור אותו
-         if (renderTask) {
-         try {
+    if (renderTask) {
+        try {
             await renderTask.cancel();
-        } catch (e) { /* התעלמות משגיאת ביטול */ }
+        } catch (e) { }
     }
 
     try {
         currentPage = await currentPdf.getPage(1);
         
-        // חישוב רוחב: במובייל נתאים לרוחב המסך, במחשב לפי הזום
         const container = document.querySelector('.pdf-canvas-container');
-        const containerWidth = container.clientWidth;
+        const containerWidth = container.clientWidth; // רוחב המסך הנוכחי
         
-        let finalScale = zoomLevel;
-        // במובייל: אם הזום הוא 1 (ברירת מחדל), נחשב "התאמה לרוחב"
-        if (window.innerWidth <= 768 && zoomLevel === 1) {
-            const viewport = currentPage.getViewport({ scale: 1 });
-            finalScale = (containerWidth - 30) / viewport.width;
-        }
+        // 1. חישוב "קנה מידה בסיסי" - איך להכניס A0 למסך
+        // אנחנו שואלים את ה-PDF: מה הגודל המקורי שלך?
+        const unscaledViewport = currentPage.getViewport({ scale: 1.0 });
+        
+        // היחס בין רוחב המסך לרוחב המקורי של התוכנית
+        const baseScale = (containerWidth - 30) / unscaledViewport.width;
+        
+        // 2. הזום שלנו מכפיל את קנה המידה הבסיסי
+        // zoomLevel = 1 אומר "רוחב מלא". zoomLevel = 2 אומר "פי 2 מהרוחב"
+        const finalScale = baseScale * zoomLevel;
 
         const viewport = currentPage.getViewport({ scale: finalScale });
 
@@ -2718,13 +2724,12 @@ async function deleteInspection(event, inspectionId) {
         const drawingCanvas = document.getElementById('drawingCanvas');
         const context = canvas.getContext('2d');
 
-        // עדכון גודל הקנבסים
+        // עדכון גודל פיזי של הקנבס (זה מה שעושה את התוכנית חדה!)
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         drawingCanvas.height = viewport.height;
         drawingCanvas.width = viewport.width;
 
-        // התחלת הציור ושמירת המשימה
         renderTask = currentPage.render({
             canvasContext: context,
             viewport: viewport
@@ -2732,15 +2737,13 @@ async function deleteInspection(event, inspectionId) {
 
         await renderTask.promise;
         
-        // סיום מוצלח
         renderTask = null;
-        document.getElementById('zoomPercent').textContent = Math.round(finalScale * 100);
+        document.getElementById('zoomPercent').textContent = Math.round(zoomLevel * 100);
         
-        // ציור הליקויים מחדש
-        redrawMarkings();
+        // העברת ה-Scale החדש כדי שהציורים יתאימו את עצמם
+        redrawMarkings(finalScale, baseScale);
 
     } catch (error) {
-        // מתעלמים משגיאות שנוצרו בגלל ביטול (לחיצה מהירה על זום)
         if (error.name !== 'RenderingCancelledException') {
             console.error('PDF Render Error:', error);
         }
@@ -2781,117 +2784,260 @@ async function deleteInspection(event, inspectionId) {
         }
 
         // Drawing on PDF
-        const drawingCanvas = document.getElementById('drawingCanvas');
-        let drawingContext = drawingCanvas.getContext('2d');
+        // --- משתנים גלובליים לציור ---
+const drawingCanvas = document.getElementById('drawingCanvas');
+const drawingContext = drawingCanvas.getContext('2d');
+let currentPath = []; // לשמירת הנקודות של העט החופשי
+let currentColor = '#dc3545'; // צבע ברירת מחדל (אדום)
 
-        drawingCanvas.addEventListener('mousedown', function(e) {
-            if (!drawingTool) return;
-            
-            isDrawing = true;
-            const rect = drawingCanvas.getBoundingClientRect();
-            startX = e.clientX - rect.left;
-            startY = e.clientY - rect.top;
-        });
+// עדכון צבע בעת בחירה
+document.getElementById('colorPicker').addEventListener('input', (e) => {
+    currentColor = e.target.value;
+});
 
-        drawingCanvas.addEventListener('mousemove', function(e) {
-            if (!isDrawing) return;
-            
-            const rect = drawingCanvas.getBoundingClientRect();
-            const currentX = e.clientX - rect.left;
-            const currentY = e.clientY - rect.top;
-            
-            drawPreview(currentX, currentY);
-        });
+// עדכון בחירת כלי
+function selectTool(tool) {
+    drawingTool = tool;
+    
+    // ניקוי כפתורים פעילים
+    ['freehandBtn', 'rectBtn', 'circleBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+    
+    // סימון הכפתור שנבחר
+    if (tool === 'freehand') document.getElementById('freehandBtn').classList.add('active');
+    if (tool === 'rect') document.getElementById('rectBtn').classList.add('active');
+    if (tool === 'circle') document.getElementById('circleBtn').classList.add('active');
+}
 
-        drawingCanvas.addEventListener('mouseup', function(e) {
-            if (!isDrawing) return;
-            
-            isDrawing = false;
-            const rect = drawingCanvas.getBoundingClientRect();
-            const endX = e.clientX - rect.left;
-            const endY = e.clientY - rect.top;
-            
-            finishDrawing(endX, endY);
-        });
+// --- אירועי מגע ועכבר (תומך גם בציור חופשי) ---
 
-        drawingCanvas.addEventListener('touchstart', function(e) {
-            if (!drawingTool) return;
-            e.preventDefault();
-            
-            isDrawing = true;
-            const rect = drawingCanvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            startX = touch.clientX - rect.left;
-            startY = touch.clientY - rect.top;
-        });
+function getPointerPos(e) {
+    const rect = drawingCanvas.getBoundingClientRect();
+    // בדיקה אם זה מגע או עכבר
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+    };
+}
 
-        drawingCanvas.addEventListener('touchmove', function(e) {
-            if (!isDrawing) return;
-            e.preventDefault();
-            
-            const rect = drawingCanvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            const currentX = touch.clientX - rect.left;
-            const currentY = touch.clientY - rect.top;
-            
-            drawPreview(currentX, currentY);
-        });
+function startDrawing(e) {
+    if (!drawingTool) return;
+    if (e.type === 'touchstart') e.preventDefault(); // מניעת גלילה במובייל בזמן ציור
+    
+    isDrawing = true;
+    const pos = getPointerPos(e);
+    startX = pos.x;
+    startY = pos.y;
+    
+    if (drawingTool === 'freehand') {
+        currentPath = [{x: startX, y: startY}]; // התחלת נתיב חדש
+    }
+}
 
-        drawingCanvas.addEventListener('touchend', function(e) {
-            if (!isDrawing) return;
-            e.preventDefault();
-            
-            isDrawing = false;
-            const rect = drawingCanvas.getBoundingClientRect();
-            const touch = e.changedTouches[0];
-            const endX = touch.clientX - rect.left;
-            const endY = touch.clientY - rect.top;
-            
-            finishDrawing(endX, endY);
-        });
+function draw(e) {
+    if (!isDrawing) return;
+    if (e.type === 'touchmove') e.preventDefault();
+    
+    const pos = getPointerPos(e);
+    const currentX = pos.x;
+    const currentY = pos.y;
+    
+    // ציור בזמן אמת (Preview)
+    if (drawingTool === 'freehand') {
+        currentPath.push({x: currentX, y: currentY});
+        drawFreehandPath(currentPath, currentColor);
+    } else {
+        // ציור מחדש של הקיים + הצורה הזמנית
+        // (אנחנו מעבירים null כסקייל כדי שישתמש בברירת המחדל)
+        redrawMarkings(); 
+        drawShapePreview(startX, startY, currentX, currentY, drawingTool, currentColor);
+    }
+}
 
-        function drawPreview(currentX, currentY) {
-            redrawMarkings();
+function endDrawing(e) {
+    if (!isDrawing) return;
+    if (e.type === 'touchend') e.preventDefault();
+    
+    isDrawing = false;
+    let endX, endY;
+    
+    // במקרה של touchend, ה-touches ריק, צריך להשתמש בנקודה האחרונה הידועה
+    if (e.type === 'touchend') {
+        // בציור חופשי הנקודה האחרונה שמורה במערך
+        if (drawingTool === 'freehand' && currentPath.length > 0) {
+            const lastPoint = currentPath[currentPath.length - 1];
+            endX = lastPoint.x;
+            endY = lastPoint.y;
+        } else {
+            // בצורות רגילות זה קצת בעייתי ב-touchend ללא changedTouches מדויק, 
+            // אבל לרוב ה-touchmove האחרון הספיק. נשתמש ב-startX כברירת מחדל אם אין מידע.
+             endX = e.changedTouches ? e.changedTouches[0].clientX - drawingCanvas.getBoundingClientRect().left : startX;
+             endY = e.changedTouches ? e.changedTouches[0].clientY - drawingCanvas.getBoundingClientRect().top : startY;
+        }
+    } else {
+        const pos = getPointerPos(e);
+        endX = pos.x;
+        endY = pos.y;
+    }
+
+    finishDrawing(endX, endY);
+}
+
+// חיבור האירועים
+drawingCanvas.addEventListener('mousedown', startDrawing);
+drawingCanvas.addEventListener('mousemove', draw);
+drawingCanvas.addEventListener('mouseup', endDrawing);
+
+drawingCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+drawingCanvas.addEventListener('touchmove', draw, { passive: false });
+drawingCanvas.addEventListener('touchend', endDrawing, { passive: false });
+
+
+// --- פונקציות ציור עזר ---
+
+function drawFreehandPath(path, color) {
+    if (path.length < 2) return;
+    
+    drawingContext.beginPath();
+    drawingContext.lineWidth = 3;
+    drawingContext.lineCap = 'round';
+    drawingContext.lineJoin = 'round';
+    drawingContext.strokeStyle = color;
+    
+    drawingContext.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) {
+        drawingContext.lineTo(path[i].x, path[i].y);
+    }
+    drawingContext.stroke();
+}
+
+function drawShapePreview(sx, sy, cx, cy, tool, color) {
+    drawingContext.strokeStyle = color;
+    drawingContext.lineWidth = 3;
+    drawingContext.setLineDash([5, 5]); // קו מקווקו לסימון זמני
+    
+    drawingContext.beginPath();
+    if (tool === 'rect') {
+        drawingContext.strokeRect(sx, sy, cx - sx, cy - sy);
+    } else if (tool === 'circle' || tool === 'oval') {
+        const rx = Math.abs(cx - sx) / 2;
+        const ry = tool === 'circle' ? rx : Math.abs(cy - sy) / 2;
+        const centerX = sx + (cx - sx) / 2;
+        const centerY = sy + (cy - sy) / 2;
+        drawingContext.ellipse(centerX, centerY, rx, ry, 0, 0, 2 * Math.PI);
+        drawingContext.stroke();
+    }
+    drawingContext.setLineDash([]);
+}
+
+function finishDrawing(endX, endY) {
+    // מכינים את אובייקט הסימון
+    const marking = {
+        tool: drawingTool,
+        color: currentColor,
+        // נתונים לצורות רגילות
+        startX: startX,
+        startY: startY,
+        endX: endX,
+        endY: endY,
+        // נתונים לציור חופשי
+        path: drawingTool === 'freehand' ? [...currentPath] : null
+    };
+    
+    // נירמול נתונים (כדי שיתאימו לזום)
+    // אנחנו שומרים את האחוזים היחסיים לרוחב/גובה הקנבס הנוכחי
+    // זה הפתרון הכי טוב ל-A0 שעובר זום כל הזמן
+    const w = drawingCanvas.width;
+    const h = drawingCanvas.height;
+    
+    marking.startX /= w;
+    marking.startY /= h;
+    marking.endX /= w;
+    marking.endY /= h;
+    
+    if (marking.path) {
+        marking.path = marking.path.map(p => ({
+            x: p.x / w,
+            y: p.y / h
+        }));
+    }
+
+    defectCounter++;
+    marking.number = defectCounter;
+    
+    tempMarking = marking;
+    openAddDefectModal(marking);
+    
+    currentPath = [];
+}
+
+// פונקציית הציור מחדש המשודרגת (מטפלת בזום אוטומטית)
+function redrawMarkings() {
+    // ניקוי
+    drawingContext.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+    if (!currentInspection.defects) return;
+
+    const w = drawingCanvas.width;
+    const h = drawingCanvas.height;
+
+    currentInspection.defects.forEach(defect => {
+        if (!defect.marking) return;
+        const m = defect.marking;
+        
+        // המרת אחוזים חזרה לפיקסלים לפי הזום הנוכחי
+        // אם הנתונים ישנים (לפני התיקון הזה), הם בפיקסלים ולכן יהיו ענקיים/קטנים
+        // נניח שזה נתונים חדשים מנורמלים (0.0 עד 1.0)
+        
+        // הגנה לתמיכה לאחור (אם המספרים גדולים מ-1, הם פיקסלים ישנים)
+        let sx = m.startX > 1 ? m.startX : m.startX * w;
+        let sy = m.startY > 1 ? m.startY : m.startY * h;
+        let ex = m.endX > 1 ? m.endX : m.endX * w;
+        let ey = m.endY > 1 ? m.endY : m.endY * h;
+        
+        const color = m.color || '#dc3545'; // תמיכה לאחור באדום
+
+        if (m.tool === 'freehand' && m.path) {
+            // שחזור נתיב חופשי
+            const scaledPath = m.path.map(p => ({
+                x: p.x > 1 ? p.x : p.x * w, // תמיכה לאחור
+                y: p.y > 1 ? p.y : p.y * h
+            }));
+            drawFreehandPath(scaledPath, color);
             
-            drawingContext.strokeStyle = 'red';
+            // את המספר נשים בנקודה הראשונה
+            sx = scaledPath[0].x;
+            sy = scaledPath[0].y;
+            
+        } else {
+            // ציור צורות רגילות
+            drawingContext.strokeStyle = color;
             drawingContext.lineWidth = 3;
-            drawingContext.setLineDash([5, 5]);
+            drawingContext.beginPath();
             
-            if (drawingTool === 'rect') {
-                drawingContext.strokeRect(startX, startY, currentX - startX, currentY - startY);
-            } else if (drawingTool === 'circle' || drawingTool === 'oval') {
-                drawingContext.beginPath();
-                const radiusX = Math.abs(currentX - startX) / 2;
-                const radiusY = drawingTool === 'circle' ? radiusX : Math.abs(currentY - startY) / 2;
-                const centerX = startX + (currentX - startX) / 2;
-                const centerY = startY + (currentY - startY) / 2;
-                drawingContext.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            if (m.tool === 'rect') {
+                drawingContext.strokeRect(sx, sy, ex - sx, ey - sy);
+            } else if (m.tool === 'circle' || m.tool === 'oval') {
+                const rx = Math.abs(ex - sx) / 2;
+                const ry = m.tool === 'circle' ? rx : Math.abs(ey - sy) / 2;
+                const centerX = sx + (ex - sx) / 2;
+                const centerY = sy + (ey - sy) / 2;
+                drawingContext.ellipse(centerX, centerY, rx, ry, 0, 0, 2 * Math.PI);
                 drawingContext.stroke();
             }
-            
-            drawingContext.setLineDash([]);
         }
-
-        function finishDrawing(endX, endY) {
-            defectCounter++;
-            const marking = {
-                number: defectCounter,
-                tool: drawingTool,
-                startX: startX,
-                startY: startY,
-                endX: endX,
-                endY: endY
-            };
-            
-            tempMarking = marking;
-            
-            openAddDefectModal(marking);
-            
-            drawingTool = null;
-            document.getElementById('rectBtn').classList.remove('active');
-            document.getElementById('circleBtn').classList.remove('active');
-            document.getElementById('ovalBtn').classList.remove('active');
-        }
+        
+        // ציור המספר
+        drawingContext.fillStyle = 'white';
+        drawingContext.fillRect(sx - 2, sy - 22, 25, 20);
+        drawingContext.fillStyle = color;
+        drawingContext.font = 'bold 20px Arial';
+        drawingContext.fillText(defect.number, sx, sy - 5);
+    });
+}
 
         function redrawMarkings() {
     // ניקוי הקנבס
