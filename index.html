@@ -7,7 +7,18 @@
     <meta name="mobile-web-app-capable" content="yes">
     <title>פיקוח עליון</title>
     
-    <!-- Firebase SDK -->
+	<link rel="apple-touch-icon" sizes="180x180" href="ICON/apple-touch-icon.png">
+
+    <link rel="icon" type="image/png" sizes="32x32" href="ICON/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="ICON/favicon-16x16.png">
+
+    <link rel="shortcut icon" href="ICON/favicon.ico">
+
+    <link rel="manifest" href="manifest.json">
+
+    <meta name="theme-color" content="#ffffff">
+    
+	<!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -1546,9 +1557,14 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>תמונות (ניתן לבחור מספר תמונות)</label>
-                    <input type="file" id="defectImages" accept="image/*" multiple>
-                    <small class="info-text">💡 טיפ: תמונות קטנות (< 500KB כל אחת) יעזרו למנוע בעיות אחסון</small>
+                    <label>תמונות (ניתן לבחור מספר תמונות או לצלם)</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <button type="button" class="btn-add" style="padding: 8px 16px; font-size: 14px;" onclick="document.getElementById('defectImages').click()">📁 בחר תמונות</button>
+                        <button type="button" class="btn-add" style="padding: 8px 16px; font-size: 14px; background: #17a2b8;" onclick="document.getElementById('defectCamera').click()">📷 צלם תמונה</button>
+                    </div>
+                    <input type="file" id="defectImages" accept="image/*" multiple style="display: none;">
+                    <input type="file" id="defectCamera" accept="image/*" capture="environment" style="display: none;">
+                    <small class="info-text">💡 ניתן לבחור מספר תמונות מהגלריה או לצלם ישירות מהמצלמה</small>
                 </div>
                 <div id="imagePreviewContainer" style="display: none; margin-top: 10px;">
                     <label>תמונות שנבחרו:</label>
@@ -3059,31 +3075,37 @@ function finishDrawing(endX, endY) {
         // Defects Management
         function openAddDefectModal(marking = null) {
             document.getElementById('addDefectModal').classList.add('active');
+            document.querySelector('#addDefectModal h2').textContent = 'הוספת ליקוי';
             
             if (marking) {
                 tempMarking = marking;
             }
             
+            // איפוס תמונות שנאספו
+            collectedImageFiles = [];
             document.getElementById('imagePreviewContainer').style.display = 'none';
             document.getElementById('imagePreviewList').innerHTML = '';
         }
 
-        document.getElementById('defectImages').addEventListener('change', function(e) {
-            const files = e.target.files;
+        // מערך גלובלי לאיסוף כל התמונות (מגלריה + מצלמה)
+        let collectedImageFiles = [];
+
+        function updateImagePreviews() {
             const previewContainer = document.getElementById('imagePreviewContainer');
             const previewList = document.getElementById('imagePreviewList');
             
-            if (files.length > 0) {
+            if (collectedImageFiles.length > 0) {
                 previewContainer.style.display = 'block';
                 previewList.innerHTML = '';
                 
-                Array.from(files).forEach((file, index) => {
+                collectedImageFiles.forEach((file, index) => {
                     const reader = new FileReader();
                     reader.onload = function(event) {
                         const div = document.createElement('div');
                         div.style.position = 'relative';
                         div.innerHTML = `
                             <img src="${event.target.result}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 2px solid #e0e0e0;">
+                            <button type="button" onclick="removeCollectedImage(${index})" style="position: absolute; top: -5px; right: -5px; background: #dc3545; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px;">×</button>
                             <div style="text-align: center; font-size: 12px; margin-top: 5px;">${index + 1}</div>
                         `;
                         previewList.appendChild(div);
@@ -3092,15 +3114,42 @@ function finishDrawing(endX, endY) {
                 });
             } else {
                 previewContainer.style.display = 'none';
+                previewList.innerHTML = '';
             }
+        }
+
+        function removeCollectedImage(index) {
+            collectedImageFiles.splice(index, 1);
+            updateImagePreviews();
+        }
+
+        document.getElementById('defectImages').addEventListener('change', function(e) {
+            // הוספת תמונות מהגלריה לאוסף
+            Array.from(e.target.files).forEach(f => collectedImageFiles.push(f));
+            updateImagePreviews();
+            e.target.value = ''; // איפוס כדי לאפשר בחירה חוזרת
         });
 
-       // פונקציה להוספת הערה כללית (במקום ליקוי ידני)
-function addGeneralNote() {
-    tempMarking = null; // מוודאים שאין סימון
-    // פותחים את המודל כרגיל, הטופס יזהה שאין marking וישמור כהערה
+        document.getElementById('defectCamera').addEventListener('change', function(e) {
+            // הוספת תמונה מהמצלמה לאוסף
+            if (e.target.files[0]) {
+                collectedImageFiles.push(e.target.files[0]);
+                updateImagePreviews();
+            }
+            e.target.value = '';
+        });
+
+       // פונקציה להוספת ליקוי ידני (ללא סימון על התוכנית)
+function addManualDefect() {
+    tempMarking = null;
     openAddDefectModal();
-    // שינוי כותרת המודל ויזואלית (אופציונלי)
+    document.querySelector('#addDefectModal h2').textContent = 'הוספת ליקוי ידני';
+}
+
+// פונקציה להוספת הערה כללית (במקום ליקוי ידני)
+function addGeneralNote() {
+    tempMarking = null;
+    openAddDefectModal();
     document.querySelector('#addDefectModal h2').textContent = 'הוספת הערה כללית';
 }
 
@@ -3109,10 +3158,8 @@ function addGeneralNote() {
 
     const description = document.getElementById('defectDescription').value;
     const severity = document.getElementById('defectSeverity').value;
-    const imageFiles = document.getElementById('defectImages').files;
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
-    // נעילת כפתור ושינוי טקסט
     const originalText = submitBtn.textContent;
     submitBtn.textContent = 'מעלה תמונות ושומר... ⏳';
     submitBtn.disabled = true;
@@ -3120,13 +3167,11 @@ function addGeneralNote() {
     try {
         const imageUrls = [];
 
-        // אם יש תמונות - נעלה אותן אחת אחת ל-Storage
-        if (imageFiles.length > 0) {
-            // נתיב מסודר: פרויקטים -> ID -> פיקוחים -> תמונות
+        // העלאת כל התמונות שנאספו (גלריה + מצלמה)
+        if (collectedImageFiles.length > 0) {
             const storagePath = `projects/${currentProject.id}/inspections/${currentInspection.id}/defects`;
             
-            for (const file of imageFiles) {
-                // קריאה לפונקציה שיצרנו בשלב 2
+            for (const file of collectedImageFiles) {
                 const url = await uploadFileToStorage(file, storagePath);
                 imageUrls.push(url);
             }
@@ -3134,23 +3179,24 @@ function addGeneralNote() {
 
         // הכנת אובייקט הליקוי
         const defect = {
-            id: Date.now(), // מזהה ייחודי לליקוי
-            number: tempMarking ? tempMarking.number : defectCounter,
+            id: Date.now(),
+            number: 0, // ייקבע ע"י renumberDefects
             description: description,
             severity: severity,
-            marking: tempMarking, // המיקום על השרטוט
-            images: imageUrls // שומרים רק את הקישורים!
+            marking: tempMarking,
+            images: imageUrls,
+            isManual: !tempMarking // סימון שזה ליקוי ידני
         };
 
-        // הוספה למערך הליקויים המקומי (כדי שנראה מיד במסך)
         if (!currentInspection.defects) {
             currentInspection.defects = [];
         }
         currentInspection.defects.push(defect);
-        currentInspection.defects.sort((a, b) => a.number - b.number);
 
-        // עדכון המסמך ב-Firestore (עדכון מערך הליקויים בתוך הפיקוח)
-        // שים לב: אנחנו צריכים לעדכן את כל מערך הליקויים מחדש
+        // סידור ומספור מחדש
+        renumberDefects();
+
+        // שמירה ב-Firestore
         await db.collection('projects')
             .doc(currentProject.id)
             .collection('inspections')
@@ -3166,6 +3212,7 @@ function addGeneralNote() {
         // איפוס וסגירה
         closeModal('addDefectModal');
         document.getElementById('addDefectForm').reset();
+        collectedImageFiles = [];
         tempMarking = null;
         alert("✅ הליקוי והתמונות נשמרו בהצלחה!");
 
@@ -3173,7 +3220,6 @@ function addGeneralNote() {
         console.error("Error saving defect:", error);
         alert("❌ שגיאה בשמירה: " + error.message);
     } finally {
-        // שחרור הכפתור
         submitBtn.textContent = originalText;
         submitBtn.disabled = false;
     }
@@ -3219,30 +3265,31 @@ function addGeneralNote() {
           function renumberDefects() {
     if (!currentInspection.defects) return;
 
-    // מיון: קודם כל ליקויים עם סימון (לפי סדר יצירה), ואז הערות כלליות
+    // מיון: קודם ליקויים עם סימון על התוכנית (לפי סדר סימון),
+    // ואז ליקויים ידניים (לפי סדר יצירה)
     currentInspection.defects.sort((a, b) => {
         const aMarked = !!a.marking;
         const bMarked = !!b.marking;
 
-        if (aMarked && !bMarked) return -1; // מסומן עולה למעלה
-        if (!aMarked && bMarked) return 1;  // לא מסומן יורד למטה
+        if (aMarked && !bMarked) return -1;
+        if (!aMarked && bMarked) return 1;
         
-        return a.id - b.id; // מיון פנימי לפי זמן
+        return a.id - b.id; // מיון פנימי לפי סדר יצירה
     });
 
-    // מספור מחדש:
-    // רק ליקויים עם סימון מקבלים מספר (1, 2, 3...)
-    // ליקויים ללא סימון נשארים בלי מספר (או מקבלים 0)
+    // מספור עוקב: כל הליקויים מקבלים מספר רציף (1, 2, 3...)
+    // ליקויים מסומנים קודם, ידניים אחרי - אבל כולם ממוספרים
     let counter = 0;
     currentInspection.defects.forEach((defect) => {
+        counter++;
+        defect.number = counter;
         if (defect.marking) {
-            counter++;
-            defect.number = counter;
             defect.marking.number = counter;
-        } else {
-            defect.number = null; // הערה כללית - ללא מספר
         }
     });
+
+    // עדכון המונה הגלובלי
+    defectCounter = counter;
 }
 
 // שמירת ליקוי (מחליף את הפונקציה הקודמת saveDefect)
@@ -3297,17 +3344,14 @@ function deleteDefect(defectId) {
         const div = document.createElement('div');
         div.className = `defect-item ${defect.severity}`;
         
-        // בדיקה: האם זה ליקוי ממוספר או הערה כללית?
+        // כל הליקויים ממוספרים - מסומנים מקבלים עיגול כחול, ידניים עיגול אפור
         let badgeHtml;
-        if (defect.number) {
-            // עיגול כחול עם מספר
-            badgeHtml = `<div style="background: #007bff; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0;">${defect.number}</div>`;
-        } else {
-            // אייקון של הערה (אפור)
-            badgeHtml = `<div style="background: #6c757d; color: white; width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;">📝</div>`;
-        }
+        const isMarked = !!defect.marking;
+        const bgColor = isMarked ? '#007bff' : '#6c757d';
+        badgeHtml = `<div style="background: ${bgColor}; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0;">${defect.number}</div>`;
         
         const severityText = { 'low': 'נמוכה', 'medium': 'בינונית', 'critical': 'קריטית' };
+        const typeLabel = isMarked ? '📍 סימון על תוכנית' : '📝 ליקוי ידני';
 
         // תמונות
         const images = defect.images || (defect.image ? [defect.image] : []);
@@ -3324,13 +3368,16 @@ function deleteDefect(defectId) {
             <div class="defect-header" style="display: flex; justify-content: space-between; align-items: start;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     ${badgeHtml}
-                    <div style="font-weight: bold; font-size: 16px;">${defect.description}</div>
+                    <div>
+                        <div style="font-weight: bold; font-size: 16px;">${defect.description}</div>
+                        <small style="color: #999;">${typeLabel}</small>
+                    </div>
                 </div>
                 <button onclick="deleteDefect(${defect.id})" style="background: transparent; border: none; color: #999; font-size: 20px; cursor: pointer;">×</button>
             </div>
             
             <div style="margin-top: 5px; padding-right: 38px;">
-                <span class="severity-badge ${defect.severity}" style="font-size: 12px;">${defect.number ? 'חומרה' : 'דחיפות'}: ${severityText[defect.severity]}</span>
+                <span class="severity-badge ${defect.severity}" style="font-size: 12px;">חומרה: ${severityText[defect.severity]}</span>
                 ${imagesHtml}
             </div>
         `;
@@ -3364,32 +3411,18 @@ function deleteDefect(defectId) {
 
         
 
-        function saveInspection() {
-            const projects = JSON.parse(localStorage.getItem('projects') || '[]');
-            const projectIndex = projects.findIndex(p => p.id === currentProject.id);
-            const inspectionIndex = projects[projectIndex].inspections.findIndex(i => i.id === currentInspection.id);
-            
-            projects[projectIndex].inspections[inspectionIndex] = currentInspection;
-            currentProject = projects[projectIndex];
-            
+        async function saveInspection() {
             try {
-                const dataToSave = JSON.stringify(projects);
-                const sizeInMB = (new Blob([dataToSave]).size / (1024 * 1024)).toFixed(2);
-                
-                localStorage.setItem('projects', dataToSave);
-            } catch (e) {
-                if (e.name === 'QuotaExceededError') {
-                    let totalSize = 0;
-                    for (let key in localStorage) {
-                        if (localStorage.hasOwnProperty(key)) {
-                            totalSize += localStorage[key].length + key.length;
-                        }
-                    }
-                    const usedMB = (totalSize / (1024 * 1024)).toFixed(2);
-                    
-                    throw new Error(`אחסון מלא!\n\nהדפדפן מגביל את נפח האחסון המקומי.\nנוצל כעת: ~${usedMB}MB\n\nפתרונות:\n1. מחק פרויקטים ישנים\n2. דחוס את ה-PDF יותר\n3. השתמש בתמונות קטנות יותר בליקויים`);
-                }
-                throw e;
+                await db.collection('projects')
+                    .doc(currentProject.id)
+                    .collection('inspections')
+                    .doc(currentInspection.id)
+                    .update({
+                        defects: currentInspection.defects || []
+                    });
+            } catch (error) {
+                console.error('Error saving inspection:', error);
+                alert('❌ שגיאה בשמירה: ' + error.message);
             }
         }
 
